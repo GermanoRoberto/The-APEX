@@ -1,0 +1,31 @@
+# Virtual Environment
+venv/
+.venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Instance folder (for Flask/Quart)
+instance/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.history/
+
+# AI cache
+.ai_cache/

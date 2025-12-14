@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Configurações{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="mb-4">Configurações de Chaves de API</h1>
+    <p class="text-muted">Gerencie as chaves de API usadas para se conectar aos serviços externos.</p>
+
+    <!-- Alerta para exibir mensagens de sucesso/erro -->
+    <div id="alert-placeholder" class="mb-4"></div>
+
+    <div class="card">
+        <div class="card-body">
+            <form id="settings-form" method="POST">
+                <!-- Seção de IA -->
+                <fieldset class="border p-3 mb-4 rounded">
+                    <legend class="float-none w-auto px-2 h6">Inteligência Artificial (Detecção Automática)</legend>
+                    <div class="mb-3">
+                        <label for="AI_API_KEY" class="form-label">Chave da API de IA (OpenAI, Gemini ou Groq)</label>
+                        <input type="password" class="form-control" id="AI_API_KEY" name="AI_API_KEY" placeholder="Cole sua chave aqui para salvar ou atualizar">
+                        <div class="form-text">Chave atual: <span class="font-monospace">{{ key_status.AI_API_KEY }}</span> | Provedor Detectado: <span class="badge bg-info text-dark">{{ key_status.AI_PROVIDER_DETECTED }}</span></div>
+                    </div>
+                </fieldset>
+
+                <!-- Seção de Outros Serviços -->
+                <fieldset class="border p-3 mb-4 rounded">
+                    <legend class="float-none w-auto px-2 h6">Outros Serviços</legend>
+                    <div class="mb-3">
+                        <label for="VT_API_KEY" class="form-label">Chave da API do VirusTotal</label>
+                        <input type="password" class="form-control" id="VT_API_KEY" name="VT_API_KEY" placeholder="Deixe em branco para não alterar">
+                        <div class="form-text">Chave atual: <span class="font-monospace">{{ key_status.VT_API_KEY }}</span></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="OSM_API_KEY" class="form-label">Chave da API do OpenSourceMalware.com</label>
+                        <input type="password" class="form-control" id="OSM_API_KEY" name="OSM_API_KEY" placeholder="Deixe em branco para não alterar">
+                        <div class="form-text">Chave atual: <span class="font-monospace">{{ key_status.OSM_API_KEY }}</span></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="GOOGLE_SAFE_BROWSING_API_KEY" class="form-label">Chave da API do Google Safe Browsing</label>
+                        <input type="password" class="form-control" id="GOOGLE_SAFE_BROWSING_API_KEY" name="GOOGLE_SAFE_BROWSING_API_KEY" placeholder="Deixe em branco para não alterar">
+                        <div class="form-text">Chave atual: <span class="font-monospace">{{ key_status.GOOGLE_SAFE_BROWSING_API_KEY }}</span></div>
+                    </div>
+                </fieldset>
+
+                <button type="submit" class="btn btn-primary" id="save-button">
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    Salvar Alterações
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('settings-form');
+    const saveButton = document.getElementById('save-button');
+    const spinner = saveButton.querySelector('.spinner-border');
+    const alertPlaceholder = document.getElementById('alert-placeholder');
+
+
+    form.addEventListener('submit', function (event) {
+        event.preventDefault(); // Impede o recarregamento da página
+
+        saveButton.disabled = true;
+        spinner.classList.remove('d-none');
+        alertPlaceholder.innerHTML = '';
+
+        const formData = new FormData(form);
+
+        fetch('{{ url_for("api.api_setup") }}', {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.ok) {
+                window.showAlert(data.message, 'success', alertPlaceholder);
+                form.reset(); // Limpa os campos de senha
+                // Atualiza a UI com o novo status das chaves
+                if (data.key_status) {
+                    updateKeyStatusUI(data.key_status);
+                }
+            } else {
+                window.showAlert(data.error || 'Ocorreu um erro desconhecido.', 'danger', alertPlaceholder);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            window.showAlert('Erro de comunicação com o servidor. Verifique o console para mais detalhes.', 'danger', alertPlaceholder);
+        })
+        .finally(() => {
+            saveButton.disabled = false;
+            spinner.classList.add('d-none');
+        });
+    });
+
+    function updateKeyStatusUI(keyStatus) {
+        // Mapeia o NOME do input para o elemento span correspondente
+        const keyStatusSpan = form.querySelector('input[name="AI_API_KEY"]').nextElementSibling;
+        const vtStatusSpan = form.querySelector('input[name="VT_API_KEY"]').nextElementSibling;
+
+        if (keyStatusSpan) {
+            keyStatusSpan.innerHTML = `Chave atual: <span class="font-monospace">${keyStatus.AI_API_KEY}</span> | Provedor Detectado: <span class="badge bg-info text-dark">${keyStatus.AI_PROVIDER_DETECTED}</span>`;
+        }
+        if (vtStatusSpan) {
+            vtStatusSpan.innerHTML = `Chave atual: <span class="font-monospace">${keyStatus.VT_API_KEY}</span>`;
+        }
+    }
+});
+</script>
+{% endblock %}

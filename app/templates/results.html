@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Resultado da Análise{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Resultado da Análise</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Resumo Executivo</h5>
+    </div>
+    <div class="card-body">
+        {% if analysis.ai_analysis and analysis.ai_analysis.summary %}
+            {{ analysis.ai_analysis.summary | markdown }}
+        {% else %}
+            <p class="text-muted">A análise por IA não foi gerada para este item.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">Detalhes Técnicos</h5>
+    </div>
+    <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+                <strong>Identificador:</strong> 
+                <code class="text-break">{{ analysis.item_identifier }}</code>
+            </li>
+            <li class="list-group-item">
+                <strong>Tipo:</strong> {{ analysis.item_type | capitalize }}
+            </li>
+            <li class="list-group-item">
+                <strong>Veredito Final:</strong> 
+                <span class="badge 
+                    {% if analysis.final_verdict == 'malicious' %}bg-danger
+                    {% elif analysis.final_verdict == 'suspicious' %}bg-warning text-dark
+                    {% else %}bg-success{% endif %}">
+                    {{ analysis.final_verdict | capitalize }}
+                </span>
+            </li>
+            <li class="list-group-item">
+                <strong>Data da Análise:</strong> {{ analysis.created_at | int | strftime('%d/%m/%Y %H:%M:%S') }}
+            </li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">Táticas e Técnicas do MITRE ATT&CK®</h5>
+    </div>
+    <div class="card-body">
+        {% if analysis.mitre_attack and analysis.mitre_attack is iterable and analysis.mitre_attack is not string %}
+            <div class="accordion" id="mitre-accordion">
+                {% for tactic_info in analysis.mitre_attack %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading-{{ loop.index }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="false" aria-controls="collapse-{{ loop.index }}">
+                                <strong>Tática:</strong>&nbsp;{{ tactic_info.tactic }}
+                            </button>
+                        </h2>
+                        <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}" data-bs-parent="#mitre-accordion">
+                            <div class="accordion-body">
+                                <ul class="list-group">
+                                    {% for technique in tactic_info.techniques %}
+                                        <li class="list-group-item">
+                                            <a href="{{ technique.link }}" target="_blank" rel="noopener noreferrer">{{ technique.id }}: {{ technique.name }}</a>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% elif analysis.mitre_attack and analysis.mitre_attack.tactic %}
+            {# Fallback for the simpler mock structure #}
+            <p><strong>Tática:</strong> {{ analysis.mitre_attack.tactic }}</p>
+            <p><strong>Técnica:</strong> {{ analysis.mitre_attack.technique }} - {{ analysis.mitre_attack.description }}</p>
+        {% else %}
+            <p class="text-muted">Nenhuma informação do MITRE ATT&CK foi encontrada para este item.</p>
+        {% endif %}
+    </div>
+</div>
+
+
+{% endblock %}
