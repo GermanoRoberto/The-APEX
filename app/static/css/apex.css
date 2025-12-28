@@ -9,7 +9,7 @@
 
 body {
     margin: 0;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-primary);
     display: flex;
@@ -27,6 +27,8 @@ body {
     padding: 20px;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .logo {
@@ -52,6 +54,7 @@ body {
     transition: all 0.3s ease;
     margin-bottom: 5px;
     width: 100%;
+    box-sizing: border-box;
     text-decoration: none;
     display: block;
 }
@@ -80,9 +83,15 @@ body {
 }
 
 .header h1 {
-    font-size: 28px;
-    font-weight: 300;
+    font-size: 32px;
+    font-weight: 600;
     margin: 0;
+}
+
+.header p {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-top: 6px;
 }
 
 .glass-card {
