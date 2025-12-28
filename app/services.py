@@ -132,6 +132,83 @@ async def get_local_network_info() -> Dict[str, Any]:
     return {"ip": ip, "mask": "255.255.255.0", "prefix": 24, "cidr": str(iface.network)}
 
 @utils.log_execution
+async def run_alert_correlation(alerts: List[Dict[str, Any]], rules: Dict[str, Any], ai_provider: str = None) -> str:
+    import time
+    ai_provider = ai_provider or 'groq'
+    # Normaliza entradas
+    def _norm(a):
+        return {
+            "ts": a.get("timestamp") or a.get("ts") or time.time(),
+            "severity": str(a.get("severity", "info")).lower(),
+            "source": a.get("source") or a.get("siem") or "unknown",
+            "ip": a.get("ip") or a.get("src_ip") or a.get("dst_ip"),
+            "domain": a.get("domain") or a.get("fqdn"),
+            "hash": a.get("hash") or a.get("sha256") or a.get("sha1"),
+            "hostname": a.get("hostname") or a.get("host"),
+            "event": a.get("event") or a.get("message") or ""
+        }
+    normalized = [_norm(a or {}) for a in (alerts or [])]
+    window_minutes = int(rules.get("window_minutes") or 15)
+    threshold = int(rules.get("threshold") or 3)
+    now = time.time()
+    start_cut = now - (window_minutes * 60)
+    recent = [a for a in normalized if float(a["ts"]) >= start_cut]
+    # Correlação por entidade
+    buckets: Dict[str, Dict[str, Any]] = {}
+    def _add(key, val, alert):
+        if not val: return
+        k = f"{key}:{val}"
+        b = buckets.setdefault(k, {"key": key, "value": val, "count": 0, "sources": set(), "samples": []})
+        b["count"] += 1
+        b["sources"].add(alert["source"])
+        if len(b["samples"]) < 5:
+            b["samples"].append(alert["event"])
+    for a in recent:
+        for key in ("ip", "domain", "hash", "hostname"):
+            _add(key, a.get(key), a)
+    # Incidentes quando excede threshold
+    incidents = []
+    for k, b in buckets.items():
+        sev = "low"
+        if b["count"] >= threshold:
+            sev = "medium"
+            if b["key"] in ("hash", "ip") and b["count"] >= threshold + 2:
+                sev = "high"
+        incidents.append({
+            "entity": {"type": b["key"], "value": b["value"]},
+            "count": b["count"],
+            "sources": sorted(list(b["sources"])),
+            "samples": b["samples"],
+            "severity": sev
+        })
+    # Veredito final
+    final_verdict = "clean"
+    if any(i["severity"] == "high" for i in incidents):
+        final_verdict = "malicious"
+    elif any(i["severity"] == "medium" for i in incidents):
+        final_verdict = "suspicious"
+    # IA resumo
+    try:
+        provider_instance = get_ai_provider(ai_provider)
+        prompt = "Resuma os incidentes correlacionados (português), indicando entidades, contagem e ações imediatas."
+        prompt = _truncate_prompt_by_tokens(prompt, settings.GROQ_MODEL)
+        ai_summary = await asyncio.to_thread(provider_instance.generate_explanation, prompt, settings.AI_API_KEY)
+        ai = {"summary": ai_summary, "remediation": "Isolar hosts afetados, bloquear IPs suspeitos e revisar credenciais comprometidas."}
+    except Exception:
+        ai = {"summary": "Falha ao gerar resumo por IA.", "remediation": ""}
+    # Persistência
+    result = {
+        "item_identifier": f"SOC Correlation ({len(incidents)} entidades correlacionadas)",
+        "item_type": "soc",
+        "final_verdict": final_verdict,
+        "external": {"correlation": {"window_minutes": window_minutes, "threshold": threshold, "incidents": incidents}},
+        "ai_analysis": ai,
+        "scanned_at": now
+    }
+    result_id = await asyncio.to_thread(database.save_analysis, result)
+    return result_id
+
+@utils.log_execution
 async def run_system_scan(module_type: str, ai_provider: str = None) -> Dict[str, Any]:
     """
     Simula uma varredura de sistema (mock) e solicita análise da IA.

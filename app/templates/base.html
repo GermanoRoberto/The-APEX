@@ -32,6 +32,9 @@
         <a href="{{ url_for('main.index') }}?module=audit" class="nav-btn {% if request.endpoint == 'main.index' and request.args.get('module') == 'audit' %}active{% endif %}">
             💻 Windows Audit
         </a>
+        <a href="{{ url_for('main.index') }}?module=soc" class="nav-btn {% if request.endpoint == 'main.index' and request.args.get('module') == 'soc' %}active{% endif %}">
+            🔗 Alert Correlator
+        </a>
 
         <div style="flex: 1;"></div>
         <div class="glass-card" style="padding: 12px; margin-top: 10px;">

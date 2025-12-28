@@ -3,10 +3,10 @@
 {% block content %}
 <div class="header">
     <h1 id="module-title">
-        {% if module == 'network' %}Network Monitor{% elif module == 'audit' %}Windows Audit{% else %}Malware Analyzer{% endif %}
+        {% if module == 'network' %}Network Monitor{% elif module == 'audit' %}Windows Audit{% elif module == 'soc' %}Alert Correlator{% else %}Malware Analyzer{% endif %}
     </h1>
     <p style="color: var(--text-secondary);">
-        {% if module == 'network' %}Monitoramento de Rede{% elif module == 'audit' %}Auditoria Windows{% else %}Módulo de Segurança Ativa{% endif %}
+        {% if module == 'network' %}Monitoramento de Rede{% elif module == 'audit' %}Auditoria Windows{% elif module == 'soc' %}Correlação de Alertas (SOC Lab){% else %}Módulo de Segurança Ativa{% endif %}
     </p>
 </div>
 
@@ -86,6 +86,67 @@
             Verificação de políticas de segurança, updates pendentes e configurações de hardening.
         </div>
     </div>
+</div>
+{% endif %}
+
+{% if module == 'soc' %}
+<div id="module-soc" class="module-section">
+    <div class="hero-card" style="margin-bottom: 20px;">
+        <h3>Correlação de Alertas</h3>
+        <p>Agrupe alertas por entidade (IP, domínio, hash, hostname), defina janela e limiar para gerar incidentes.</p>
+    </div>
+    <div class="glass-card">
+        <div style="display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start;">
+            <div>
+                <label class="form-label">Cole um array JSON de alertas</label>
+                <textarea id="corr-input" class="form-control" style="height: 220px;"></textarea>
+                <div class="text-muted" style="margin-top:6px;">Campos reconhecidos: timestamp, severity, source, ip, domain, hash, hostname, event</div>
+            </div>
+            <div>
+                <label class="form-label">Janela (minutos)</label>
+                <input id="corr-window" class="form-control" type="number" value="15">
+                <label class="form-label" style="margin-top:10px;">Limiar de correlação</label>
+                <input id="corr-threshold" class="form-control" type="number" value="3">
+                <button class="action-btn" style="margin-top:12px;" onclick="runCorrelation()">Executar Correlação</button>
+            </div>
+        </div>
+        <div class="console-output" id="corr-output" style="margin-top: 16px;">Aguardando entrada…</div>
+    </div>
+    <div class="glass-card">
+        <div class="text-muted">Dica: importe alertas do seu SIEM como JSON e ajuste os parâmetros para reduzir falsos positivos.</div>
+    </div>
+    <script>
+        async function runCorrelation() {
+            const output = document.getElementById('corr-output');
+            const csrf = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
+            let alerts = [];
+            try {
+                alerts = JSON.parse(document.getElementById('corr-input').value || '[]');
+                if (!Array.isArray(alerts)) throw new Error('Entrada deve ser um array JSON');
+            } catch(e) {
+                output.innerText = '[ERROR] JSON inválido: ' + e.message;
+                return;
+            }
+            const rules = {
+                window_minutes: parseInt(document.getElementById('corr-window').value || '15'),
+                threshold: parseInt(document.getElementById('corr-threshold').value || '3')
+            };
+            output.innerText = '[INFO] Executando correlação...\n';
+            try {
+                const resp = await fetch('/api/correlation/alerts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ alerts, rules })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Erro no servidor');
+                output.innerText += '[SUCCESS] ID: ' + data.result_id + '\\nRedirecionando para resultados...';
+                setTimeout(() => { window.location.href = '/results/' + data.result_id; }, 900);
+            } catch(e) {
+                output.innerText += '[ERROR] ' + e.message;
+            }
+        }
+    </script>
 </div>
 {% endif %}
 
