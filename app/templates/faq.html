@@ -3,51 +3,104 @@
 {% block title %}Perguntas Frequentes (FAQ){% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Perguntas Frequentes</h1>
+<div class="header">
+    <h1>Perguntas Frequentes</h1>
+    <p style="color: var(--text-secondary);">Entenda como a plataforma funciona.</p>
 </div>
 
-<div class="accordion" id="faqAccordion">
-    <div class="accordion-item">
-        <h2 class="accordion-header" id="headingOne">
-            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true">
-                Como funciona a análise?
-            </button>
-        </h2>
-        <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-                A análise é realizada em múltiplas etapas:
-                <ul>
-                    <li><strong>Análise Multi-Fonte:</strong> Consultamos APIs como VirusTotal e Google Safe Browsing simultaneamente.</li>
-                    <li><strong>Análise Estática Local:</strong> Verificamos o arquivo localmente (hash SHA256, tipo de arquivo) antes de enviar dados externos.</li>
-                    <li><strong>Inteligência Artificial:</strong> Utilizamos modelos avançados (Gemini, Groq) para interpretar os dados técnicos e gerar um resumo executivo em linguagem natural.</li>
-                </ul>
-            </div>
+<style>
+    details {
+        margin-bottom: 15px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 8px;
+        border: 1px solid var(--glass-border);
+        overflow: hidden;
+    }
+    
+    summary {
+        padding: 15px;
+        cursor: pointer;
+        font-weight: 600;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.02);
+        transition: background 0.2s;
+    }
+    
+    summary:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    details[open] summary {
+        border-bottom: 1px solid var(--glass-border);
+        background: rgba(76, 76, 255, 0.1);
+    }
+    
+    .faq-content {
+        padding: 20px;
+        color: var(--text-primary);
+        line-height: 1.6;
+    }
+
+    .faq-content ul {
+        margin-top: 10px;
+        padding-left: 20px;
+    }
+    
+    .faq-content li {
+        margin-bottom: 5px;
+    }
+
+    .faq-content a {
+        color: var(--accent-color);
+        text-decoration: none;
+    }
+
+    .faq-content a:hover {
+        text-decoration: underline;
+    }
+</style>
+
+<div class="glass-card">
+    <details open>
+        <summary>Como funciona a análise?</summary>
+        <div class="faq-content">
+            A análise é realizada em múltiplas etapas:
+            <ul>
+                <li><strong>Análise Multi-Fonte:</strong> Consultamos APIs como VirusTotal e Google Safe Browsing simultaneamente.</li>
+                <li><strong>Análise Estática Local:</strong> Verificamos o arquivo localmente (hash SHA256, tipo de arquivo) antes de enviar dados externos.</li>
+                <li><strong>Inteligência Artificial:</strong> Utilizamos modelos avançados (Gemini, Groq) para interpretar os dados técnicos e gerar um resumo executivo em linguagem natural.</li>
+            </ul>
         </div>
-    </div>
-    <div class="accordion-item">
-        <h2 class="accordion-header" id="headingTwo">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false">
-                O que é a Detecção de Phishing Avançada?
-            </button>
-        </h2>
-        <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-                O sistema identifica URLs que utilizam caracteres especiais (como cirílicos) para se passar por domínios legítimos. Essa técnica, conhecida como ataque de homógrafo, é comum em tentativas de phishing e é detectada automaticamente pela nossa ferramenta.
-            </div>
+    </details>
+
+    <details>
+        <summary>O que é a Detecção de Phishing Avançada?</summary>
+        <div class="faq-content">
+            O sistema identifica URLs que utilizam caracteres especiais (como cirílicos) para se passar por domínios legítimos. Essa técnica, conhecida como ataque de homógrafo, é comum em tentativas de phishing e é detectada automaticamente pela nossa ferramenta.
         </div>
-    </div>
-    <div class="accordion-item">
-        <h2 class="accordion-header" id="headingThree">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false">
-                O que significa a pontuação de risco?
-            </button>
-        </h2>
-        <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#faqAccordion">
-            <div class="accordion-body">
-                A pontuação de risco é um cálculo consolidado que combina os vereditos de todas as ferramentas de segurança consultadas. Ela varia de 0 a 100, onde valores mais altos indicam uma maior probabilidade de o arquivo ou URL ser malicioso.
-            </div>
+    </details>
+
+    <details>
+        <summary>O que significa a pontuação de risco?</summary>
+        <div class="faq-content">
+            A pontuação de risco é um cálculo consolidado que combina os vereditos de todas as ferramentas de segurança consultadas. Ela varia de 0 a 100, onde valores mais altos indicam uma maior probabilidade de o arquivo ou URL ser malicioso.
         </div>
-    </div>
+    </details>
+
+    <details>
+        <summary>Onde posso obter as chaves de API necessárias?</summary>
+        <div class="faq-content">
+            Para o funcionamento completo da ferramenta, você precisa configurar chaves de API para os serviços externos. Aqui estão os links oficiais para obter cada chave:
+            <ul>
+                <li><strong>VirusTotal:</strong> Acesse <a href="https://www.virustotal.com/gui/join-us" target="_blank">https://www.virustotal.com/gui/join-us</a> para criar uma conta gratuita e obter sua chave de API.</li>
+                <li><strong>Google Safe Browsing:</strong> Vá para <a href="https://console.developers.google.com/" target="_blank">https://console.developers.google.com/</a>, crie um projeto, habilite a API Safe Browsing e gere uma chave de API.</li>
+                <li><strong>Google Gemini:</strong> Obtenha uma chave gratuita em <a href="https://aistudio.google.com/app/apikey" target="_blank">https://aistudio.google.com/app/apikey</a>.</li>
+                <li><strong>Groq:</strong> Registre-se em <a href="https://console.groq.com/keys" target="_blank">https://console.groq.com/keys</a> para gerar sua chave de API.</li>
+                <li><strong>OpenAI (GPT-4):</strong> Acesse <a href="https://platform.openai.com/api-keys" target="_blank">https://platform.openai.com/api-keys</a> para criar uma chave (observe os custos associados).</li>
+                <li><strong>Grok (xAI):</strong> Disponível em <a href="https://console.x.ai/" target="_blank">https://console.x.ai/</a> para gerar chaves.</li>
+            </ul>
+            Após obter as chaves, configure-as na página de <a href="{{ url_for('main.setup') }}">Configurações</a> da aplicação.
+        </div>
+    </details>
 </div>
 {% endblock %}

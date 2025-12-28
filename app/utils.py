@@ -14,9 +14,47 @@ Boas práticas aplicadas:
 """
 import os
 import re
+import secrets
+import logging
+import functools
+import time
+from quart import session
 
 # Importa o objeto de configurações centralizado
 from .config import settings
+
+logger = logging.getLogger(__name__)
+
+def log_execution(func):
+    """Decorator para logar a execução de funções (início, fim e tempo)."""
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        func_name = func.__name__
+        logger.debug(f"⚡ [START] {func_name} iniciado.")
+        start_time = time.time()
+        try:
+            result = await func(*args, **kwargs)
+            elapsed = time.time() - start_time
+            logger.debug(f"✅ [END] {func_name} concluído em {elapsed:.2f}s.")
+            return result
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ [ERROR] {func_name} falhou após {elapsed:.2f}s: {e}")
+            raise
+    return wrapper
+
+def generate_csrf_token():
+    """Gera um token CSRF e o armazena na sessão."""
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_hex(32)
+    return session['_csrf_token']
+
+def validate_csrf_token(token):
+    """Valida o token CSRF fornecido contra o da sessão."""
+    stored_token = session.get('_csrf_token')
+    if not stored_token or not token:
+        return False
+    return secrets.compare_digest(stored_token, token)
 
 def mask_key(value: str | None) -> str:
     """
@@ -84,27 +122,59 @@ def get_key_status() -> dict:
 
 def save_env_file(env_path: str, new_vars: dict) -> bool:
     """
-    Salva um dicionário de variáveis de ambiente em um arquivo .env.
-    Esta função sobrescreve o arquivo existente.
-
-    Args:
-        env_path: O caminho para o arquivo .env.
-        new_vars: Um dicionário com as variáveis a serem salvas.
-
-    Returns:
-        True se o arquivo foi salvo com sucesso, False caso contrário.
+    Salva variáveis no arquivo .env preservando o conteúdo existente (comentários, etc).
+    Substitui valores existentes e adiciona novos ao final se não existirem.
     """
     try:
-        with open(env_path, 'w') as f:
-            for key, value in new_vars.items():
-                # Garante que valores com espaços sejam envoltos em aspas
-                if ' ' in value and not (value.startswith('"') and value.endswith('"')):
-                    f.write(f'{key}="{value}"\n')
+        # Lê o conteúdo atual
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        else:
+            lines = []
+
+        updated_keys = set()
+        new_lines = []
+
+        # Regex para identificar atribuições de variáveis (ex: CHAVE=VALOR ou CHAVE="VALOR")
+        # Captura: 1=KEY, 2=Quote?, 3=VALUE, 4=Quote?
+        env_pattern = re.compile(r'^([A-Z_][A-Z0-9_]*)\s*=\s*(["\']?)(.*?)(\2)\s*$')
+
+        for line in lines:
+            match = env_pattern.match(line.strip())
+            if match:
+                key = match.group(1)
+                if key in new_vars:
+                    # Substitui a linha com o novo valor
+                    val = new_vars[key]
+                    # Adiciona aspas se tiver espaço
+                    if ' ' in val and not (val.startswith('"') and val.endswith('"')):
+                        val = f'"{val}"'
+                    new_lines.append(f'{key}={val}\n')
+                    updated_keys.add(key)
                 else:
-                    f.write(f'{key}={value}\n')
+                    # Mantém a linha original
+                    new_lines.append(line)
+            else:
+                # Mantém comentários e linhas em branco
+                new_lines.append(line)
+
+        # Adiciona variáveis que não existiam no arquivo
+        if new_lines and not new_lines[-1].endswith('\n'):
+            new_lines[-1] += '\n'
+            
+        for key, val in new_vars.items():
+            if key not in updated_keys:
+                if ' ' in val and not (val.startswith('"') and val.endswith('"')):
+                    val = f'"{val}"'
+                new_lines.append(f'{key}={val}\n')
+
+        # Escreve de volta
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+            
         return True
     except IOError as e:
-        # Em um cenário real, um log mais detalhado seria preferível
         print(f"Erro ao escrever no arquivo .env: {e}")
         return False
 

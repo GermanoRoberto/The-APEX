@@ -1,8 +1,0 @@
-flask
-requests
-google-generativeai
-openai
-python-dotenv
-diskcache
-waitress
-pytest

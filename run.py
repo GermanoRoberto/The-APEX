@@ -20,11 +20,12 @@ async def main():
     # para acionar a abertura automática do navegador.
     app.debug = config.use_reloader
 
-    print(f"Starting Hypercorn server on {config.bind[0]}")
+    print("\n🛡️  THE APEX ARCHITECT // MALWARE ANALYZER 🛡️")
+    print(f"👉 Access: http://{config.bind[0]}")
+    
     if config.use_reloader:
-        print("Reloader is enabled. The browser will open automatically on startup.")
-        print(f"Reloading will ignore patterns: {config.reload_exclude_patterns}")
-    print("Use Ctrl+C to stop the server.")
+        print(f"ℹ️  Reloader Active. Ignoring: {config.reload_exclude_patterns}")
+    print("👉 CTRL+C to shutdown\n")
 
     # Inicia o servidor com a configuração carregada.
     await serve(app, config)
@@ -33,4 +34,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nServer shut down by user.")
+        print("\n🛑 System shutdown initiated by user.")

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Início{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Início</h1>
+    <p style="color: var(--text-secondary);">Página principal com informações gerais.</p>
+</div>
+
+<div class="glass-card">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Sobre os Módulos</h3>
+    <div style="display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 15px; line-height: 1.6;">
+        <div>
+            <h4 style="margin: 0 0 8px 0; color: #fff;">🛡️ Malware Analyzer</h4>
+            <p style="color: var(--text-primary);">
+                Analisa arquivos localmente (hash, tipo, strings) e consolida vereditos de serviços externos, produzindo um resumo executivo por IA.
+            </p>
+            <ul style="color: var(--text-primary); padding-left: 18px;">
+                <li>Entrada: executáveis, bibliotecas e scripts.</li>
+                <li>Análise local: SHA256, tipo de arquivo, strings e metadados.</li>
+                <li>Serviços externos: VirusTotal e envio opcional ao OpenSourceMalware.</li>
+                <li>Consolidação: veredito final com base nas evidências.</li>
+                <li>IA: resumo executivo e recomendações.</li>
+            </ul>
+            <a href="{{ url_for('main.index') }}?module=malware" class="action-btn" style="text-decoration: none;">Abrir Malware Analyzer</a>
+        </div>
+        <div>
+            <h4 style="margin: 0 0 8px 0; color: #fff;">📡 Network Monitor</h4>
+            <p style="color: var(--text-primary);">
+                Descobre dispositivos na rede, identifica portas e serviços expostos e sugere endurecimento com base em riscos comuns.
+            </p>
+            <ul style="color: var(--text-primary); padding-left: 18px;">
+                <li>Modos: Rápida (descoberta) e Completa (portas e banners).</li>
+                <li>Auto-detecção: IP, máscara e CIDR sugerido.</li>
+                <li>Saída: dispositivos, portas abertas, serviços e fabricante por ARP.</li>
+                <li>IA: resumo executivo e recomendações de mitigação.</li>
+            </ul>
+            <a href="{{ url_for('main.index') }}?module=network" class="action-btn" style="text-decoration: none;">Abrir Network Monitor</a>
+        </div>
+        <div>
+            <h4 style="margin: 0 0 8px 0; color: #fff;">💻 Windows Audit</h4>
+            <p style="color: var(--text-primary);">
+                Avalia configurações essenciais do Windows e destaca riscos e ações recomendadas para hardening.
+            </p>
+            <ul style="color: var(--text-primary); padding-left: 18px;">
+                <li>Itens: UAC, firewall, privilégios administrativos e políticas básicas.</li>
+                <li>Veredito: limpo, suspeito ou crítico conforme achados.</li>
+                <li>Registro: resultados acessíveis para revisão.</li>
+            </ul>
+            <a href="{{ url_for('main.index') }}?module=audit" class="action-btn" style="text-decoration: none;">Abrir Windows Audit</a>
+        </div>
+    </div>
+    <div style="margin-top: 20px; color: var(--text-secondary);">
+        Status de chaves: {{ (key_status.status if key_status and key_status.status is defined) or 'Indisponível' }}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+# Configuração de Produção para Hypercorn
+# Otimizado para Quart (ASGI)
+
+# Escuta em todas as interfaces do container
+bind = ["0.0.0.0:5000"]
+
+# Workers: Para I/O bound (como chamadas de API e Rede), 
+# uma regra comum é (2 x CPUs) + 1. Ajuste conforme necessário.
+workers = 4
+
+# Logs estruturados para stdout (padrão Docker/K8s)
+accesslog = "-"
+errorlog = "-"
+
+# Timeouts para evitar conexões presas (Keep-Alive)
+keep_alive_timeout = 120
+graceful_timeout = 30

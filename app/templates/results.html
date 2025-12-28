@@ -3,89 +3,228 @@
 {% block title %}Resultado da Análise{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Resultado da Análise</h1>
+<div class="header">
+    <h1>Resultado da Análise</h1>
+    <p style="color: var(--text-secondary);">Detalhes completos da investigação.</p>
+    <div style="margin-top:10px;">
+        <button class="action-btn" onclick="window.print()">🖨️ Exportar PDF</button>
+    </div>
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <h5 class="mb-0">Resumo Executivo</h5>
-    </div>
-    <div class="card-body">
+<!-- Resumo Executivo -->
+<div class="glass-card">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Resumo Executivo</h3>
+    <div style="margin-top: 15px; line-height: 1.6;">
         {% if analysis.ai_analysis and analysis.ai_analysis.summary %}
             {{ analysis.ai_analysis.summary | markdown }}
         {% else %}
-            <p class="text-muted">A análise por IA não foi gerada para este item.</p>
+            <p style="color: var(--text-secondary);">A análise por IA não foi gerada para este item.</p>
         {% endif %}
     </div>
 </div>
 
-<div class="card mt-4">
-    <div class="card-header">
-        <h5 class="mb-0">Detalhes Técnicos</h5>
-    </div>
-    <div class="card-body">
-        <ul class="list-group list-group-flush">
-            <li class="list-group-item">
-                <strong>Identificador:</strong> 
-                <code class="text-break">{{ analysis.item_identifier }}</code>
-            </li>
-            <li class="list-group-item">
-                <strong>Tipo:</strong> {{ analysis.item_type | capitalize }}
-            </li>
-            <li class="list-group-item">
-                <strong>Veredito Final:</strong> 
+<!-- Detalhes Técnicos -->
+<div class="glass-card" style="margin-top: 20px;">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Detalhes Técnicos</h3>
+    
+    <div style="margin-top: 15px;">
+        <div style="display: grid; grid-template-columns: 200px 1fr; gap: 10px; margin-bottom: 10px;">
+            <div style="color: var(--text-secondary); font-weight: 600;">Identificador:</div>
+            <div style="font-family: 'Consolas', monospace; word-break: break-all;">{{ analysis.item_identifier }}</div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 200px 1fr; gap: 10px; margin-bottom: 10px;">
+            <div style="color: var(--text-secondary); font-weight: 600;">Tipo:</div>
+            <div><span class="badge bg-secondary">{{ analysis.item_type | capitalize }}</span></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 200px 1fr; gap: 10px; margin-bottom: 10px;">
+            <div style="color: var(--text-secondary); font-weight: 600;">Veredito Final:</div>
+            <div>
                 <span class="badge 
                     {% if analysis.final_verdict == 'malicious' %}bg-danger
-                    {% elif analysis.final_verdict == 'suspicious' %}bg-warning text-dark
+                    {% elif analysis.final_verdict == 'suspicious' %}bg-warning
                     {% else %}bg-success{% endif %}">
                     {{ analysis.final_verdict | capitalize }}
                 </span>
-            </li>
-            <li class="list-group-item">
-                <strong>Data da Análise:</strong> {{ analysis.created_at | int | strftime('%d/%m/%Y %H:%M:%S') }}
-            </li>
-        </ul>
-    </div>
-</div>
-
-<div class="card mt-4">
-    <div class="card-header">
-        <h5 class="mb-0">Táticas e Técnicas do MITRE ATT&CK®</h5>
-    </div>
-    <div class="card-body">
-        {% if analysis.mitre_attack and analysis.mitre_attack is iterable and analysis.mitre_attack is not string %}
-            <div class="accordion" id="mitre-accordion">
-                {% for tactic_info in analysis.mitre_attack %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="heading-{{ loop.index }}">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="false" aria-controls="collapse-{{ loop.index }}">
-                                <strong>Tática:</strong>&nbsp;{{ tactic_info.tactic }}
-                            </button>
-                        </h2>
-                        <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}" data-bs-parent="#mitre-accordion">
-                            <div class="accordion-body">
-                                <ul class="list-group">
-                                    {% for technique in tactic_info.techniques %}
-                                        <li class="list-group-item">
-                                            <a href="{{ technique.link }}" target="_blank" rel="noopener noreferrer">{{ technique.id }}: {{ technique.name }}</a>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                {% endfor %}
             </div>
-        {% elif analysis.mitre_attack and analysis.mitre_attack.tactic %}
-            {# Fallback for the simpler mock structure #}
-            <p><strong>Tática:</strong> {{ analysis.mitre_attack.tactic }}</p>
-            <p><strong>Técnica:</strong> {{ analysis.mitre_attack.technique }} - {{ analysis.mitre_attack.description }}</p>
-        {% else %}
-            <p class="text-muted">Nenhuma informação do MITRE ATT&CK foi encontrada para este item.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 200px 1fr; gap: 10px; margin-bottom: 10px;">
+            <div style="color: var(--text-secondary); font-weight: 600;">Data da Análise:</div>
+            <div>{{ analysis.created_at | int | strftime('%d/%m/%Y %H:%M:%S') }}</div>
+        </div>
+        
+        {% if analysis.item_type == 'network' %}
+        <div style="margin-top: 20px;">
+            <h4 style="color: #fff; margin-bottom: 10px;">Dispositivos Descobertos</h4>
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>IP</th>
+                            <th>Hostname</th>
+                            <th>MAC</th>
+                            <th>Portas Abertas</th>
+                            <th>Serviços</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dev in analysis.external.network_devices %}
+                        <tr>
+                            <td>{{ dev.ip }}</td>
+                            <td>{{ dev.hostname or '-' }}</td>
+                            <td>{{ dev.mac or '-' }}</td>
+                            <td>
+                                {% if dev.open_ports and dev.open_ports|length > 0 %}
+                                    {{ dev.open_ports | join(', ') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td style="max-width: 500px;">
+                                {% if dev.services and dev.services|length > 0 %}
+                                    <ul style="list-style: none; padding-left: 0; margin: 0;">
+                                        {% for svc in dev.services %}
+                                           <li><strong>{{ svc.service }}</strong> ({{ svc.port }}): <span style="color: var(--text-secondary);">{{ svc.banner if svc.banner else '-' }}</span></li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align:center; color: var(--text-secondary);">Nenhum dispositivo ativo foi descoberto.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
         {% endif %}
     </div>
 </div>
 
+{% if analysis.item_type != 'network' %}
+<div class="glass-card" style="margin-top: 20px;">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Táticas e Técnicas do MITRE ATT&CK®</h3>
+    <div style="margin-top: 15px;">
+        {% if analysis.mitre_attack and analysis.mitre_attack is iterable and analysis.mitre_attack is not string %}
+            {% for tactic_info in analysis.mitre_attack %}
+                <div style="margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+                    <div style="font-weight: bold; color: var(--accent-color); margin-bottom: 10px;">
+                        Tática: {{ tactic_info.tactic }}
+                    </div>
+                    <ul style="list-style: none; padding-left: 0;">
+                        {% for technique in tactic_info.techniques %}
+                            <li style="margin-bottom: 5px; padding-left: 15px; border-left: 2px solid var(--glass-border);">
+                                <a href="{{ technique.link }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-primary); text-decoration: none;">
+                                    {{ technique.id }}: {{ technique.name }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
+        {% elif analysis.mitre_attack and analysis.mitre_attack.tactic %}
+            <p><strong>Tática:</strong> {{ analysis.mitre_attack.tactic }}</p>
+            <p><strong>Técnica:</strong> {{ analysis.mitre_attack.technique }} - {{ analysis.mitre_attack.description }}</p>
+        {% else %}
+            <p style="color: var(--text-secondary);">Nenhuma informação do MITRE ATT&CK foi encontrada para este item.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
 
+{% if analysis.item_type != 'network' and analysis.external %}
+<div class="glass-card" style="margin-top: 20px;">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Resultados por Ferramenta</h3>
+    <div style="margin-top: 15px;">
+        <div style="overflow-x: auto;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Fonte</th>
+                        <th>Veredito</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for name, data in analysis.external.items() %}
+                    <tr>
+                        <td>{{ name }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if data.verdict == 'malicious' %}bg-danger
+                                {% elif data.verdict == 'suspicious' %}bg-warning
+                                {% elif data.verdict == 'clean' %}bg-success
+                                {% else %}bg-secondary{% endif %}">
+                                {{ data.verdict or 'unknown' }}
+                            </span>
+                        </td>
+                        <td style="max-width: 500px;">
+                            {% if data.error %}
+                                <span style="color: var(--text-secondary);">Erro: {{ data.error }}</span>
+                            {% else %}
+                                <pre style="white-space: pre-wrap; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">{{ data | tojson(indent=2) }}</pre>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if analysis.item_type != 'network' %}
+<div class="glass-card" style="margin-top: 20px;">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Orientações de Remediação</h3>
+    <div style="margin-top: 15px; line-height: 1.6;">
+        {% if analysis.ai_analysis and analysis.ai_analysis.remediation %}
+            {{ analysis.ai_analysis.remediation | markdown }}
+        {% else %}
+            <p style="color: var(--text-secondary);">As recomendações de remediação serão apresentadas quando a análise por IA estiver configurada.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div style="margin-top: 20px; display: flex; gap: 15px;">
+    <a href="{{ url_for('main.inicio') }}" class="action-btn" style="text-decoration: none; background-color: var(--glass-border);">🏠 Voltar ao Início</a>
+    <a href="{{ url_for('main.history') }}" class="action-btn" style="text-decoration: none;">🕒 Voltar ao Histórico</a>
+</div>
+
+{% endblock %}
+
+{% block head %}
+<style>
+@media print {
+    body {
+        background: #fff !important;
+    }
+    .sidebar {
+        display: none !important;
+    }
+    .main-content {
+        margin: 0 !important;
+        padding: 0 10px !important;
+        width: 100% !important;
+    }
+    .alert {
+        display: none !important;
+    }
+    .glass-card {
+        background: #fff !important;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+    }
+    .action-btn {
+        display: none !important;
+    }
+}
+</style>
 {% endblock %}

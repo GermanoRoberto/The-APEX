@@ -48,6 +48,7 @@ h11==0.16.0
 annotated-types==0.7.0
 pydantic-core==2.41.5
 typing-inspection==0.4.2
+pefile==2023.2.7
 regex==2025.11.3
 packaging==25.0
 colorama==0.4.6

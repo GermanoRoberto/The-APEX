@@ -90,6 +90,228 @@ def _truncate_prompt_by_tokens(prompt: str, model_name: str) -> str:
             return prompt[:char_limit]
         return prompt
 
+async def get_local_network_info() -> Dict[str, Any]:
+    """
+    Detecta automaticamente o IPv4 local e a máscara (Windows),
+    retornando uma sugestão de CIDR para varredura.
+    """
+    import re
+    import ipaddress
+    try:
+        proc = await asyncio.create_subprocess_exec("ipconfig", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, _ = await proc.communicate()
+        text = out.decode(errors="ignore")
+        ipv4_match = re.search(r"(Endere\u00e7o IPv4|IPv4 Address)[^\d]*(\d+\.\d+\.\d+\.\d+)", text)
+        mask_match = re.search(r"(M\u00e1scara de Sub-rede|Subnet Mask)[^\d]*(\d+\.\d+\.\d+\.\d+)", text)
+        if ipv4_match and mask_match:
+            ip = ipv4_match.group(2)
+            mask = mask_match.group(2)
+            parts = [int(p) for p in mask.split(".")]
+            prefix = sum(bin(p).count("1") for p in parts)
+            iface = ipaddress.IPv4Interface(f"{ip}/{prefix}")
+            cidr = str(iface.network)
+            return {"ip": ip, "mask": mask, "prefix": prefix, "cidr": cidr}
+    except Exception as e:
+        logger.warning(f"Falha ao executar ipconfig: {e}")
+    # Fallback para /24 baseado no IP local
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+    iface = ipaddress.IPv4Interface(f"{ip}/24")
+    return {"ip": ip, "mask": "255.255.255.0", "prefix": 24, "cidr": str(iface.network)}
+
+@utils.log_execution
+async def run_system_scan(module_type: str, ai_provider: str = None) -> Dict[str, Any]:
+    """
+    Simula uma varredura de sistema (mock) e solicita análise da IA.
+    """
+    ai_provider = 'groq'
+
+    import platform # Import local para evitar poluição global se usado pouco
+    
+    # 1. Coleta de Dados (Simulação de Sensores Reais)
+    scan_data = {}
+    if module_type == 'malware':
+        scan_data = {
+            "target": "System32/Drivers",
+            "files_scanned": 1420,
+            "suspicious": ["unknown_driver.sys (No Signature)"],
+            "status": "WARNING"
+        }
+    elif module_type == 'network':
+        scan_data = {
+            "interface": "eth0",
+            "open_ports": [80, 443, 3389],
+            "traffic_anomaly": "High outbound UDP traffic to IP 192.168.1.105",
+            "status": "ALERT"
+        }
+    elif module_type == 'audit':
+        async def _ps(cmd: str) -> Any:
+            proc = await asyncio.create_subprocess_exec(
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            out, _ = await proc.communicate()
+            text = out.decode(errors="ignore").strip()
+            try:
+                return json.loads(text)
+            except Exception:
+                return text
+        os_info = f"{platform.system()} {platform.release()}"
+        hostname = platform.node()
+        try:
+            net_info = await get_local_network_info()
+            local_ip = net_info.get("ip")
+        except Exception:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+            finally:
+                s.close()
+        run_keys_cmd = "$p=@('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run');$o=@();foreach($k in $p){if(Test-Path $k){$props=Get-ItemProperty $k;$o+=$props.PSObject.Properties|Where-Object{$_.MemberType -eq 'NoteProperty'}|ForEach-Object{[PSCustomObject]@{Key=$k;Name=$_.Name;Value=$_.Value;LastWriteTime=(Get-Item $k).LastWriteTime}}}}$o|ConvertTo-Json -Depth 4"
+        uninstall_cmd = "$paths=@('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall');$items=@();foreach($p in $paths){if(Test-Path $p){Get-ChildItem $p|ForEach-Object{ $k=$_;$props=Get-ItemProperty $k.PSPath; $items+=[PSCustomObject]@{ Name=$props.DisplayName; Publisher=$props.Publisher; InstallDate=$props.InstallDate; Version=$props.DisplayVersion; InstallLocation=$props.InstallLocation; KeyPath=$k.PSPath; LastWriteTime=(Get-Item $k.PSPath).LastWriteTime }}}}$items|Where-Object{$_.Name}|ConvertTo-Json -Depth 4"
+        tasks_cmd = "$t=Get-ScheduledTask|Where-Object{$_.Hidden -eq $true};$o=@();foreach($x in $t){$inf=$x|Get-ScheduledTaskInfo;$o+=[PSCustomObject]@{TaskName=$x.TaskName;Path=$x.TaskPath;Hidden=$x.Hidden;LastRunTime=$inf.LastRunTime;NextRunTime=$inf.NextRunTime;Actions=$x.Actions}}$o|ConvertTo-Json -Depth 4"
+        run_entries = await _ps(run_keys_cmd) or []
+        programs = await _ps(uninstall_cmd) or []
+        tasks_hidden = await _ps(tasks_cmd) or []
+        if isinstance(run_entries, dict): run_entries=[run_entries]
+        if isinstance(programs, dict): programs=[programs]
+        if isinstance(tasks_hidden, dict): tasks_hidden=[tasks_hidden]
+        import time, re
+        from datetime import datetime, timezone
+        def _parse_install_date(v):
+            try:
+                s=str(v)
+                if len(s)==8:
+                    return datetime.strptime(s,"%Y%m%d").replace(tzinfo=timezone.utc).timestamp()
+            except Exception:
+                return None
+            return None
+        now=time.time()
+        recent_cut=now-(14*24*3600)
+        programs_recent=[]
+        for pr in programs:
+            ts=None
+            if pr.get("InstallDate"): ts=_parse_install_date(pr.get("InstallDate"))
+            if not ts and pr.get("LastWriteTime"):
+                try:
+                    ts=datetime.strptime(pr["LastWriteTime"],"%d/%m/%Y %H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+                except Exception:
+                    ts=None
+            if ts and ts>=recent_cut:
+                programs_recent.append(pr)
+        exe_paths=[]
+        for e in run_entries:
+            v=str(e.get("Value") or "")
+            m=re.search(r'\"([^\"]+\\.exe)\"|([^\\s]+\\.exe)',v,flags=re.IGNORECASE)
+            p=(m.group(1) or m.group(2)) if m else None
+            if p: exe_paths.append(p)
+        suspicious=[]
+        for p in exe_paths:
+            try:
+                bad_loc=any(s in p.lower() for s in ["appdata","temp","\\users\\"])
+                missing_pub=any((pr.get("InstallLocation") and pr.get("InstallLocation") in p) for pr in programs)==False
+                if bad_loc or missing_pub:
+                    suspicious.append({"path":p,"reason":"location_or_publisher"})
+            except Exception:
+                continue
+        related=[]
+        names_for_reputation=set()
+        for item in suspicious[:3]:
+            try:
+                if os.path.exists(item["path"]):
+                    fn=os.path.basename(item["path"])
+                    names_for_reputation.add(fn.lower())
+                    with open(item["path"],"rb") as f:
+                        content=f.read()
+                    rid=await run_file_analysis(content, fn, 'groq')
+                    related.append({"path":item["path"],"result_id":rid})
+            except Exception:
+                continue
+        # Extrai nomes de processo das entradas de inicialização
+        for e in run_entries[:20]:
+            val=str(e.get("Value") or "")
+            try:
+                import re
+                m=re.search(r'([\\w\\-]+\\.exe)', val, flags=re.IGNORECASE)
+                if m:
+                    names_for_reputation.add(m.group(1).lower())
+            except Exception:
+                pass
+        names_list=sorted(list(names_for_reputation))[:5]
+        ai_reputation=None
+        try:
+            if names_list:
+                provider_instance = get_ai_provider('groq')
+                rep_prompt = "Avalie rapidamente se os seguintes nomes de processo são geralmente seguros ou suspeitos, com uma frase por item e possíveis motivos:\n- " + "\n- ".join(names_list) + "\nResponda em português, objetivo."
+                rep_prompt = _truncate_prompt_by_tokens(rep_prompt, settings.GROQ_MODEL)
+                ai_reputation = await asyncio.to_thread(provider_instance.generate_explanation, rep_prompt, settings.AI_API_KEY)
+        except Exception:
+            ai_reputation = None
+        scan_data = {
+            "os": os_info,
+            "machine_name": hostname,
+            "ip": local_ip,
+            "admin_privileges": "Yes",
+            "firewall": "Active",
+            "uac": "Disabled",
+            "status": "ALERT" if suspicious or programs_recent or tasks_hidden else "OK",
+            "startup_entries": run_entries,
+            "scheduled_tasks_hidden": tasks_hidden,
+            "programs_recent": programs_recent,
+            "suspicious_apps": suspicious
+        }
+    else:
+        raise ValueError(f"Módulo desconhecido: {module_type}")
+
+    # 2. Análise da IA
+    ai_analysis = "IA não configurada ou erro na execução."
+    
+    # Determina o provedor
+    
+    try:
+        provider_instance = get_ai_provider(ai_provider)
+        
+        # Recupera a chave API apropriada
+        key_for_provider = None
+        if ai_provider == "gemini":
+            key_for_provider = settings.AI_API_KEY
+        elif ai_provider == "groq":
+             key_for_provider = settings.AI_API_KEY
+        # Simplificação: Usamos AI_API_KEY como padrão.
+        
+        if not key_for_provider:
+             ai_analysis = "Chave de API não configurada."
+        else:
+            pruned = _prune_data_for_prompt(scan_data)
+            prompt_core = "Você é o The Apex, uma IA de Cibersegurança. Analise o JSON técnico abaixo e dê um veredito curto e direto.\n\n"
+            prompt_json = json.dumps(pruned, indent=2, ensure_ascii=False)
+            full_prompt = f"{prompt_core}Módulo: {module_type}\n\n```json\n{prompt_json}\n```\n\nResumo objetivo em português:"
+            safe_prompt = _truncate_prompt_by_tokens(full_prompt, settings.GROQ_MODEL)
+            
+            ai_analysis = await asyncio.to_thread(
+                provider_instance.generate_explanation, 
+                safe_prompt, 
+                key_for_provider
+            )
+
+    except Exception as e:
+        logger.error(f"Erro na análise de IA para scan de sistema: {e}", exc_info=True)
+        ai_analysis = f"Erro na IA: {str(e)}"
+
+    return {
+        "raw_data": scan_data,
+        "ai_analysis": ai_analysis,
+        "ai_reputation": ai_reputation if module_type == 'audit' else None,
+        "related_analyses": related if module_type == 'audit' else None
+    }
+
 
 # --- LÓGICA DE ORQUESTRAÇÃO DE ANÁLISE ---
 
@@ -112,10 +334,16 @@ async def run_file_analysis(content: bytes, filename: str, ai_provider: str = No
     # 2. Análise Externa em Paralelo com asyncio.gather
     file_backends = get_file_analysis_backends()
     tasks = [backend.analyze_file(sha256, content, filename) for backend in file_backends]
-    external_results_list = await asyncio.gather(*tasks)
+    external_results_list = await asyncio.gather(*tasks, return_exceptions=True)
     
-    # Mapeia os resultados de volta para um dicionário
-    external_results = {backend.name: result for backend, result in zip(file_backends, external_results_list)}
+    # Mapeia os resultados de volta para um dicionário, tratando exceções
+    external_results = {}
+    for backend, result in zip(file_backends, external_results_list):
+        if isinstance(result, Exception):
+            logger.error(f"Erro no backend de arquivo {backend.name}: {result}")
+            external_results[backend.name] = {"error": str(result), "verdict": "unknown"}
+        else:
+            external_results[backend.name] = result
 
     # 3. Consolidação e Veredito Final
     final_result = local_result
@@ -144,7 +372,7 @@ async def run_file_analysis(content: bytes, filename: str, ai_provider: str = No
 
     # 5. Análise com IA
     # Executa em thread separada para não bloquear o loop de eventos do Quart
-    final_result['ai_analysis'] = await asyncio.to_thread(get_ai_explanation, final_result, ai_provider)
+    final_result['ai_analysis'] = await asyncio.to_thread(get_ai_explanation, final_result, 'groq')
 
     # 6. Persistência
     # Executa em thread separada se o driver de banco de dados for síncrono (sqlite3 padrão)
@@ -152,6 +380,42 @@ async def run_file_analysis(content: bytes, filename: str, ai_provider: str = No
     logger.info(f"Análise concluída para {filename}. ID do resultado: {result_id}")
     return result_id
 
+async def run_vault_analysis(ai_provider: str = None) -> str:
+    ai_provider = 'groq'
+    try:
+        proc = await asyncio.create_subprocess_exec("cmdkey", "/list", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, _ = await proc.communicate()
+        text = out.decode(errors="ignore")
+        entries = []
+        current = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if line.lower().startswith("target:"):
+                if current:
+                    entries.append(current)
+                    current = {}
+                current["target"] = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("type:"):
+                current["type"] = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("user:"):
+                current["user"] = line.split(":", 1)[1].strip()
+        if current:
+            entries.append(current)
+        suspicious = any(e.get("target", "").startswith("http") or "." in e.get("target", "") for e in entries)
+        result = {
+            "filename": f"Windows Vault ({len(entries)} entradas)",
+            "item_type": "vault",
+            "final_verdict": "suspicious" if suspicious else "clean",
+            "external": {},
+            "entries": entries,
+            "scanned_at": time.time()
+        }
+        result["ai_analysis"] = await asyncio.to_thread(get_ai_explanation, result, ai_provider)
+        rid = await asyncio.to_thread(database.save_analysis, result)
+        return rid
+    except Exception as e:
+        logger.error(f"Erro na análise do Windows Vault: {e}", exc_info=True)
+        raise
 def enqueue_file_analysis(content: bytes, filename: str, ai_provider: str = None) -> str:
     """
     Salva o arquivo em disco e enfileira a análise no Celery (Redis).
@@ -177,19 +441,30 @@ def enqueue_file_analysis(content: bytes, filename: str, ai_provider: str = None
     logger.info(f"Análise enfileirada para {filename}. Task ID: {task.id}")
     return task.id
 
+@utils.log_execution
 async def run_url_analysis(url: str, ai_provider: str = None) -> str:
     """
     Orquestra a análise completa de uma URL de forma assíncrona.
     """
+    ai_provider = 'groq'
+
     logger.info(f"Iniciando análise para a URL: {url}")
 
     # 1. Análise Externa em Paralelo com asyncio.gather
     url_backends = get_url_analysis_backends()
     tasks = [backend.analyze_url(url) for backend in url_backends]
-    external_results_list = await asyncio.gather(*tasks)
     
-    # Mapeia os resultados de volta para um dicionário
-    external_results = {backend.name: result for backend, result in zip(url_backends, external_results_list)}
+    # return_exceptions=True garante resiliência parcial
+    external_results_list = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Mapeia os resultados de volta para um dicionário, tratando exceções
+    external_results = {}
+    for backend, result in zip(url_backends, external_results_list):
+        if isinstance(result, Exception):
+            logger.error(f"Erro no backend de URL {backend.name}: {result}")
+            external_results[backend.name] = {"error": str(result), "verdict": "unknown"}
+        else:
+            external_results[backend.name] = result
 
     # 2. Consolidação e Veredito Final
     final_result = local_analysis.build_url_analysis_result(url, external_results)
@@ -206,6 +481,137 @@ async def run_url_analysis(url: str, ai_provider: str = None) -> str:
     logger.info(f"Análise concluída para {url}. ID do resultado: {result_id}")
     return result_id
 
+@utils.log_execution
+async def run_network_analysis(mode: str = 'quick', cidr: str = None, ai_provider: str = None) -> str:
+    import socket
+    import ipaddress
+    import time
+    import base64
+    from functools import partial
+    SEM_LIMIT = 128
+    PORTS_COMMON = [22, 23, 25, 53, 67, 68, 80, 110, 143, 389, 443, 445, 465, 500, 587, 631, 993, 995, 1723, 3306, 3389, 5432, 5900, 6379, 8080, 8443]
+    PORT_SERVICE = {
+        22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS", 67: "DHCP", 68: "DHCP",
+        80: "HTTP", 110: "POP3", 143: "IMAP", 389: "LDAP", 443: "HTTPS", 445: "SMB",
+        465: "SMTPS", 500: "IPsec", 587: "Submission", 631: "IPP", 993: "IMAPS",
+        995: "POP3S", 1723: "PPTP", 3306: "MySQL", 3389: "RDP", 5432: "PostgreSQL",
+        5900: "VNC", 6379: "Redis", 8080: "HTTP-Alt", 8443: "HTTPS-Alt"
+    }
+    OUI_VENDORS = {
+        "00:1A:79": "Cisco", "00:1B:63": "Apple", "3C:5A:B4": "ASUSTek", "5C:F9:DD": "TP-Link",
+        "F4:F5:E8": "HP", "C8:2A:14": "Dell", "D8:CF:9C": "Lenovo", "BC:5F:F6": "Ubiquiti",
+        "00:50:56": "VMware", "00:25:9C": "Intel"
+    }
+    def _vendor_from_mac(mac: str):
+        if not mac:
+            return None
+        m = mac.upper().replace("-", ":")
+        prefix = ":".join(m.split(":")[:3])
+        return OUI_VENDORS.get(prefix)
+    async def _local_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    async def _ping(ip: str):
+        proc = await asyncio.create_subprocess_exec("ping", "-n", "1", "-w", "200", ip, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, _ = await proc.communicate()
+        return b"TTL=" in out
+    async def _resolve(ip: str):
+        try:
+            return socket.gethostbyaddr(ip)[0]
+        except Exception:
+            return None
+    async def _scan_port(ip: str, port: int, timeout: float = 0.75):
+        try:
+            fut = asyncio.open_connection(ip, port)
+            reader, writer = await asyncio.wait_for(fut, timeout=timeout)
+            banner = ""
+            try:
+                if port in (80, 8080, 8443):
+                    req = b"HEAD / HTTP/1.0\r\nHost: %b\r\n\r\n" % ip.encode()
+                    writer.write(req)
+                    await writer.drain()
+                    banner = await asyncio.wait_for(reader.read(256), timeout=0.75)
+                elif port in (22, 23, 25, 110, 143, 3306, 5432, 6379):
+                    banner = await asyncio.wait_for(reader.read(128), timeout=0.75)
+                else:
+                    banner = await asyncio.wait_for(reader.read(64), timeout=0.5)
+            except Exception:
+                banner = b""
+            try:
+                writer.close()
+                if hasattr(writer, "wait_closed"):
+                    await writer.wait_closed()
+            except Exception:
+                pass
+            banner_txt = banner.decode(errors="ignore") if banner else ""
+            if not banner_txt and banner:
+                banner_txt = f"[B64] {base64.b64encode(banner[:64]).decode()}"
+            return True, banner_txt
+        except Exception:
+            return False, ""
+    async def _scan_device(ip: str, ports: list[int], full: bool, sem: asyncio.Semaphore):
+        hostname = await _resolve(ip)
+        open_ports = []
+        services = []
+        targets = ports if full else [80, 443, 445, 3389]
+        async def _bounded_scan(p):
+            async with sem:
+                return p, await _scan_port(ip, p)
+        tasks = [asyncio.create_task(_bounded_scan(p)) for p in targets]
+        results = await asyncio.gather(*tasks)
+        for p, (ok, banner) in results:
+            if ok:
+                open_ports.append(p)
+                services.append({"port": p, "service": PORT_SERVICE.get(p, "desconhecido"), "banner": banner})
+        return {"ip": ip, "hostname": hostname, "open_ports": open_ports, "services": services}
+    async def _arp_table():
+        proc = await asyncio.create_subprocess_exec("arp", "-a", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, _ = await proc.communicate()
+        lines = out.decode(errors="ignore").splitlines()
+        mapping = {}
+        for line in lines:
+            parts = [p for p in line.split(" ") if p]
+            if len(parts) >= 3 and parts[0].count(".") == 3:
+                mapping[parts[0]] = parts[1]
+        return mapping
+    ai_provider = 'groq'
+    local = await _local_ip()
+    if cidr:
+        network = ipaddress.ip_network(cidr, strict=False)
+    else:
+        ip_obj = ipaddress.ip_address(local)
+        network = ipaddress.ip_network(f"{ip_obj}/24", strict=False)
+    ips = [str(ip) for ip in network.hosts()]
+    ping_tasks = [asyncio.create_task(_ping(ip)) for ip in ips]
+    ping_results = await asyncio.gather(*ping_tasks)
+    alive = [ip for ip, ok in zip(ips, ping_results) if ok]
+    common_ports = PORTS_COMMON
+    full = mode == 'full'
+    sem = asyncio.Semaphore(SEM_LIMIT)
+    device_tasks = [asyncio.create_task(_scan_device(ip, common_ports, full, sem)) for ip in alive]
+    devices = await asyncio.gather(*device_tasks)
+    macs = await _arp_table()
+    for d in devices:
+        d["mac"] = macs.get(d["ip"])
+        d["vendor"] = _vendor_from_mac(d["mac"])
+    high_risk_ports = {3389, 445, 23}
+    risk_count = sum(1 for d in devices if any(p in high_risk_ports for p in d["open_ports"]))
+    verdict = "suspicious" if risk_count > 0 else ("clean" if devices else "unknown")
+    result = {
+        "network_cidr": str(network),
+        "external": {"network_devices": devices},
+        "scanned_at": int(time.time()),
+        "final_verdict": verdict,
+        "item_type": "network"
+    }
+    result["mitre_attack"] = utils.get_mitre_attack_info(result)
+    result["ai_analysis"] = await asyncio.to_thread(get_ai_explanation, result, ai_provider)
+    save_id = await asyncio.to_thread(database.save_analysis, {"filename": result["network_cidr"], **result})
+    return save_id
 
 async def update_settings(form_data: Dict[str, str]) -> Tuple[bool, str, Dict[str, Any]]:
     """
@@ -302,7 +708,7 @@ def get_ai_explanation(analysis_result: Dict[str, Any], ai_provider: str = None)
     Gera uma explicação em linguagem natural do resultado da análise.
     Ele lida com múltiplas chaves de IA configuradas, selecionando a correta para o provedor.
     """
-    provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
+    provider_name = 'groq'
     if not provider_name:
         raise AIProviderError("Nenhum provedor de IA configurado ou detectado.")
 
@@ -326,44 +732,25 @@ def get_ai_explanation(analysis_result: Dict[str, Any], ai_provider: str = None)
         key_for_provider = all_keys[0]
         logger.warning(f"Não foi encontrada uma chave com prefixo correspondente para o provedor {provider_name}. Tentando com a primeira chave disponível.")
 
-    # Guarda a configuração original e a substitui temporariamente
-    original_api_keys = settings.AI_API_KEY
-    settings.AI_API_KEY = key_for_provider
-
     try:
-        provider_config = get_ai_provider(provider_name)
-        if not provider_config:
-            # Este erro não deveria acontecer se a lógica de salvar estiver correta
-            raise AIProviderError("Provedor de IA não pôde ser carregado, mesmo com uma chave válida.")
-
-        prompt = _build_ai_prompt(analysis_result, provider_name)
-        
-        cache_key = hashlib.sha256(f"{provider_name}:{prompt}".encode('utf-8')).hexdigest()
+        provider_instance = get_ai_provider(provider_name)
+        summary_prompt = _build_ai_prompt(analysis_result, provider_name)
+        remediation_prompt = _build_ai_remediation_prompt(analysis_result, provider_name)
+        cache_key = hashlib.sha256(f"{provider_name}:{summary_prompt}:{remediation_prompt}".encode('utf-8')).hexdigest()
         cached_response = ai_cache.get(cache_key)
-        
         if cached_response:
             logger.info(f"Retornando resposta de IA do cache para {provider_name}")
             return cached_response
-
-        generate_func = provider_config['generate']
-        summary = generate_func(prompt)
-        
-        result = {
-            "summary": summary,
-            "provider": provider_name
-        }
-        
+        summary = provider_instance.generate_explanation(summary_prompt, api_key=key_for_provider)
+        remediation = provider_instance.generate_explanation(remediation_prompt, api_key=key_for_provider)
+        result = {"summary": summary, "remediation": remediation, "provider": provider_name}
         ai_cache.set(cache_key, result, expire=604800)
-        
         return result
     except AIProviderError:
         raise
     except Exception as e:
         logger.error(f"Erro ao gerar explicação com IA (provedor: {provider_name}): {e}")
         raise AIProviderError(f"Houve um erro de comunicação com o serviço de IA: {e}. A análise não pôde ser gerada.")
-    finally:
-        # Restaura a configuração original para não afetar outras operações
-        settings.AI_API_KEY = original_api_keys
 
 
 def _prune_data_for_prompt(data: Any) -> Any:
@@ -384,17 +771,15 @@ def _prune_data_for_prompt(data: Any) -> Any:
     return data
 
 def _build_ai_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
-    """Função auxiliar para construir o prompt para a IA."""
-    item_type = "arquivo" if "sha256" in result else "URL"
-    identifier = result.get('filename') or result.get('url')
+    item_type = "arquivo" if "sha256" in result else ("rede" if result.get("devices") else "URL")
+    identifier = result.get('filename') or result.get('url') or result.get('network_cidr')
     verdict = result.get('final_verdict', 'desconhecido')
     
-    # Otimização: Prepara uma versão leve dos dados para o prompt
     pruned_result = _prune_data_for_prompt(result)
 
     prompt = (
         f"Você é um analista de segurança cibernética sênior. Sua tarefa é fornecer um resumo executivo "
-        f"claro e conciso sobre a análise de um {item_type} suspeito.\n\n"
+        f"claro e conciso sobre a análise de {item_type}.\n\n"
         f"**Item Analisado:** `{identifier}`\n"
         f"**Veredito Final:** **{verdict.upper()}**\n\n"
         f"**Contexto:**\n"
@@ -409,7 +794,6 @@ def _build_ai_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
         f"**Seu Resumo Executivo (em português, formato Markdown):**\n"
     )
 
-    # Determina o modelo de IA que será usado para obter o limite correto de tokens
     ai_provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
     if ai_provider_name == 'gemini':
         model_name = settings.GEMINI_MODEL
@@ -418,4 +802,28 @@ def _build_ai_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
     else:
         model_name = settings.GROQ_MODEL
 
+    return _truncate_prompt_by_tokens(prompt, model_name)
+
+def _build_ai_remediation_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
+    item_type = "arquivo" if "sha256" in result else ("rede" if result.get("devices") else "URL")
+    identifier = result.get('filename') or result.get('url') or result.get('network_cidr')
+    verdict = result.get('final_verdict', 'desconhecido')
+    pruned_result = _prune_data_for_prompt(result)
+    prompt = (
+        f"Você é um especialista em resposta a incidentes. Com base nos dados a seguir, produza orientações de remediação práticas para {item_type}.\n\n"
+        f"**Item:** `{identifier}`\n"
+        f"**Veredito:** **{verdict.upper()}**\n\n"
+        f"Escreva em português, formato Markdown, estruturando em Ações Imediatas, Contenção, Erradicação, Recuperação e Verificações Pós-Remediação. "
+        f"Se o veredito for 'limpo', indique apenas boas práticas de prevenção e monitoramento. Seja específico e acionável.\n\n"
+        f"**Dados da Análise:**\n"
+        f"```json\n{json.dumps(pruned_result, indent=2, ensure_ascii=False)}\n```\n\n"
+        f"**Orientações de Remediação:**\n"
+    )
+    ai_provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
+    if ai_provider_name == 'gemini':
+        model_name = settings.GEMINI_MODEL
+    elif ai_provider_name == 'grok':
+        model_name = getattr(settings, 'GROK_MODEL', 'grok-beta')
+    else:
+        model_name = settings.GROQ_MODEL
     return _truncate_prompt_by_tokens(prompt, model_name)

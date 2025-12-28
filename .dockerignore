@@ -1,0 +1,12 @@
+venv/
+.venv/
+ENV/
+env/
+__pycache__/
+.ai_cache/
+.env
+instance/
+.git/
+.vscode/
+.history/
+desktop_app/
