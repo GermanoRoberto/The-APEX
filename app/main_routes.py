@@ -123,23 +123,6 @@ async def results(report_id):
         logger.error(f"Erro ao renderizar resultados para ID {report_id}: {e}", exc_info=True)
         return "Erro interno ao processar resultados.", 500
 
-@main_bp.route('/results/<report_id>/pdf')
-async def results_pdf(report_id):
-    try:
-        analysis = database.get_analysis(report_id)
-        if not analysis:
-            return "Relatório não encontrado.", 404
-        data = services.build_pdf_for_analysis(analysis)
-        import tempfile
-        import os
-        fd, path = tempfile.mkstemp(prefix=f"apex_report_{report_id}_", suffix=".pdf")
-        os.close(fd)
-        with open(path, "wb") as f:
-            f.write(data)
-        return await send_file(path, as_attachment=True, download_name=f"apex_report_{report_id}.pdf")
-    except Exception as e:
-        logger.error(f"Erro ao gerar PDF para ID {report_id}: {e}", exc_info=True)
-        return "Erro ao gerar PDF.", 500
 
 @main_bp.route('/faq')
 async def faq():
