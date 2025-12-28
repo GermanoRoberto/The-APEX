@@ -5,6 +5,7 @@ if /I "%~1"=="local" goto local
 if /I "%~1"=="build" goto dockerbuild
 if /I "%~1"=="run" goto dockerrun
 if /I "%~1"=="stop" goto dockerstop
+if /I "%~1"=="stoplocal" goto localstop
 if /I "%~1"=="logs" goto dockerlogs
 if /I "%~1"=="open" goto open
 goto menu
@@ -13,6 +14,11 @@ goto menu
 where python >nul 2>&1 || (echo Python nao encontrado & exit /b 1)
 python -m pip install -r requirements.txt
 python initializer.py
+goto end
+
+:localstop
+where python >nul 2>&1 || (echo Python nao encontrado & exit /b 1)
+python run.py stop
 goto end
 
 :dockerbuild
@@ -45,9 +51,11 @@ echo 2) Build Docker
 echo 3) Run Docker
 echo 4) Stop Docker
 echo 5) Abrir no navegador
+echo 6) Stop Local
 echo Q) Sair
-choice /c:12345Q /n /m "Selecione uma opcao: "
-if errorlevel 6 goto end
+choice /c:123456Q /n /m "Selecione uma opcao: "
+if errorlevel 7 goto end
+if errorlevel 6 goto localstop
 if errorlevel 5 goto open
 if errorlevel 4 goto dockerstop
 if errorlevel 3 goto dockerrun
