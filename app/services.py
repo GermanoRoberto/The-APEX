@@ -29,8 +29,14 @@ import tiktoken
 import hashlib
 import uuid
 import tempfile
+from datetime import datetime
 from diskcache import Cache
 from typing import Dict, Any, List, Tuple
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from io import BytesIO
 
 # Importações refatoradas
 from .config import settings
@@ -49,6 +55,7 @@ class AIProviderError(Exception):
 # Inicializa o cache em disco para as respostas da IA.
 # Isso cria uma pasta '.ai_cache' para armazenar os resultados.
 ai_cache = Cache(".ai_cache")
+news_cache = Cache(".ai_cache/news")
 
 CONTEXT_LIMITS = {
     'gemini-1.5-flash': 1000000,
@@ -481,6 +488,125 @@ async def run_url_analysis(url: str, ai_provider: str = None) -> str:
     logger.info(f"Análise concluída para {url}. ID do resultado: {result_id}")
     return result_id
 
+def _md_to_plain(md_text: str) -> str:
+    try:
+        import markdown as md
+        html = md.markdown(md_text or "")
+        # Remove tags simples
+        return re.sub(r"<[^>]+>", "", html)
+    except Exception:
+        return md_text or ""
+
+def build_pdf_for_analysis(analysis: Dict[str, Any]) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=36, bottomMargin=36, leftMargin=36, rightMargin=36)
+    styles = getSampleStyleSheet()
+    story = []
+
+    title = Paragraph("Resultado da Análise", styles["Title"])
+    story.append(title)
+    story.append(Spacer(1, 12))
+    subtitle = Paragraph("Detalhes completos da investigação.", styles["Italic"])
+    story.append(subtitle)
+    story.append(Spacer(1, 18))
+
+    def _fmt_ts(v):
+        try:
+            return datetime.fromtimestamp(int(float(v))).strftime('%d/%m/%Y %H:%M:%S')
+        except Exception:
+            return "-"
+    info = [
+        Paragraph(f"<b>Identificador:</b> {analysis.get('item_identifier','-')}", styles["Normal"]),
+        Paragraph(f"<b>Tipo:</b> {analysis.get('item_type','-')}", styles["Normal"]),
+        Paragraph(f"<b>Veredito Final:</b> {analysis.get('final_verdict','unknown')}", styles["Normal"]),
+        Paragraph(f"<b>Data:</b> {_fmt_ts(analysis.get('created_at'))}", styles["Normal"]),
+    ]
+    for p in info:
+        story.append(p)
+        story.append(Spacer(1, 6))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Resumo Executivo", styles["Heading2"]))
+    summary_txt = analysis.get("ai_analysis", {}).get("summary") if isinstance(analysis.get("ai_analysis"), dict) else None
+    story.append(Paragraph(_md_to_plain(summary_txt or "Resumo não disponível."), styles["BodyText"]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Táticas e Técnicas do MITRE ATT&CK", styles["Heading2"]))
+    mitre = analysis.get("mitre_attack")
+    if isinstance(mitre, list) and mitre:
+        for t in mitre[:10]:
+            story.append(Paragraph(f"Tática: {t.get('tactic','-')}", styles["BodyText"]))
+            techs = t.get("techniques") or []
+            for tech in techs[:10]:
+                story.append(Paragraph(f"- {tech.get('id','')} {tech.get('name','')}", styles["BodyText"]))
+            story.append(Spacer(1,6))
+    elif isinstance(mitre, dict) and mitre:
+        story.append(Paragraph(f"Tática: {mitre.get('tactic','-')}", styles["BodyText"]))
+        story.append(Paragraph(f"Técnica: {mitre.get('technique','-')}", styles["BodyText"]))
+    else:
+        story.append(Paragraph("Nenhuma informação do MITRE ATT&CK foi encontrada.", styles["BodyText"]))
+    story.append(Spacer(1, 12))
+    story.append(PageBreak())
+
+    if analysis.get("item_type") == "network":
+        story.append(Paragraph("Dispositivos Descobertos", styles["Heading2"]))
+        devices = analysis.get("external", {}).get("network_devices") or []
+        if devices:
+            data = [["IP","Hostname","MAC","Portas","Serviços"]]
+            for d in devices:
+                ports = ", ".join(str(p) for p in (d.get("open_ports") or []))
+                svcs = ", ".join(f"{s.get('service','?')}({s.get('port','?')})" for s in (d.get("services") or [])[:8])
+                data.append([d.get("ip","-"), d.get("hostname","-") or "-", d.get("mac","-") or "-", ports or "-", svcs or "-"])
+            table = Table(data, repeatRows=1)
+            table.setStyle(TableStyle([
+                ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
+                ('TEXTCOLOR',(0,0),(-1,0),colors.black),
+                ('GRID',(0,0),(-1,-1),0.25,colors.grey),
+                ('FONT',(0,0),(-1,0),'Helvetica-Bold'),
+                ('ALIGN',(0,0),(-1,-1),'LEFT'),
+            ]))
+            story.append(table)
+        else:
+            story.append(Paragraph("Nenhum dispositivo ativo foi descoberto.", styles["BodyText"]))
+        story.append(Spacer(1, 12))
+        story.append(PageBreak())
+
+    story.append(Paragraph("Resultados por Ferramenta", styles["Heading2"]))
+    external = analysis.get("external") or {}
+    if external:
+        rows = [["Fonte","Veredito","Detalhes"]]
+        for name, data in list(external.items())[:20]:
+            if isinstance(data, dict):
+                verdict = (data or {}).get("verdict") or "unknown"
+                try:
+                    details = json.dumps(data, ensure_ascii=False)[:1200]
+                except Exception:
+                    details = str(data)[:1200]
+            else:
+                verdict = "unknown"
+                details = str(data)[:1200]
+            rows.append([name, verdict, details])
+        table = Table(rows, repeatRows=1, colWidths=[100,80,300])
+        table.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
+            ('GRID',(0,0),(-1,-1),0.25,colors.grey),
+            ('VALIGN',(0,0),(-1,-1),'TOP'),
+        ]))
+        story.append(table)
+    else:
+        story.append(Paragraph("Sem resultados externos.", styles["BodyText"]))
+    story.append(Spacer(1, 12))
+    story.append(PageBreak())
+
+    story.append(Paragraph("Orientações de Remediação", styles["Heading2"]))
+    remediation_txt = analysis.get("ai_analysis", {}).get("remediation") if isinstance(analysis.get("ai_analysis"), dict) else None
+    story.append(Paragraph(_md_to_plain(remediation_txt or "Remediação não disponível."), styles["BodyText"]))
+
+    doc.build(story)
+    pdf_bytes = buf.getvalue()
+    buf.close()
+    return pdf_bytes
+
 @utils.log_execution
 async def run_network_analysis(mode: str = 'quick', cidr: str = None, ai_provider: str = None) -> str:
     import socket
@@ -827,3 +953,31 @@ def _build_ai_remediation_prompt(result: Dict[str, Any], ai_provider: str = None
     else:
         model_name = settings.GROQ_MODEL
     return _truncate_prompt_by_tokens(prompt, model_name)
+
+def get_latest_news(limit: int = 3) -> List[Dict[str, str]]:
+    try:
+        cached = news_cache.get("latest")
+        if cached:
+            return cached[:limit]
+        resp = requests.get("https://caveiratech.com", timeout=8)
+        html = resp.text
+        items = []
+        for m in re.finditer(r'(\d{4}-\d{2}-\d{2}).{0,400}?([A-Z][^:]{10,200}):(.{20,300}?)Leia mais', html, flags=re.S):
+            date = m.group(1).strip()
+            title = re.sub(r'\s+', ' ', m.group(2)).strip()
+            summary = re.sub(r'\s+', ' ', m.group(3)).strip()
+            items.append({"date": date, "title": title, "summary": summary, "url": "https://caveiratech.com"})
+            if len(items) >= limit:
+                break
+        if not items:
+            items = [
+                {"date": "2025-12-26", "title": "China-linked APT usa envenenamento de DNS para ataques direcionados", "summary": "Evasive Panda distribui MgBot via ataques AitM com atualizações falsas.", "url": "https://caveiratech.com"},
+                {"date": "2025-12-26", "title": "Trust Wallet alerta para atualização urgente após ataque", "summary": "Extensão 2.68 no Chrome continha código que roubava frases mnemônicas.", "url": "https://caveiratech.com"},
+                {"date": "2025-12-26", "title": "Falha crítica no LangChain Core permite roubo de segredos", "summary": "CVE-2025-68664 habilita injeção de objetos e execução maliciosa.", "url": "https://caveiratech.com"},
+            ]
+        news_cache.set("latest", items, expire=3600)
+        return items[:limit]
+    except Exception:
+        return [
+            {"date": "2025-12-26", "title": "China-linked APT usa envenenamento de DNS para ataques direcionados", "summary": "Evasive Panda distribui MgBot via ataques AitM com atualizações falsas.", "url": "https://caveiratech.com"}
+        ]

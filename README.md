@@ -1,6 +1,6 @@
 # 🛡️ The APEX — Plataforma de Segurança com IA
 
-**Aplicação web assíncrona para análise de malware, monitoramento de rede e auditoria do Windows, com relatórios em PDF, integração MITRE ATT&CK® e explicações por IA. Preparada para Docker e implantação simples.**
+**Aplicação web assíncrona para análise de malware, monitoramento de rede e auditoria do Windows, com integração MITRE ATT&CK® e explicações por IA. Preparada para Docker e implantação simples.**
 
 ## Índice
 - Descrição
@@ -11,6 +11,7 @@
 - Execução com Docker
 - Execução Local
 - Estrutura do Projeto
+- Limitações Conhecidas
 - Licença
 
 ## Descrição
@@ -19,7 +20,6 @@ The APEX é uma plataforma integrada de segurança construída em Python/Quart, 
 - Network Monitor: descoberta de dispositivos, portas e serviços.
 - Windows Audit: auditoria de hardening, entradas de inicialização e tarefas ocultas.
 - Windows Vault: coleta automática das credenciais (Credential Manager) incluída no histórico.
-Todos os relatórios suportam exportação em PDF via impressão do relatório.
 
 ## Módulos
 - Início: visão geral e acesso pelo menu aos módulos.
@@ -32,8 +32,9 @@ Todos os relatórios suportam exportação em PDF via impressão do relatório.
 - Assíncrono com Quart e chamadas paralelas.
 - IA para Resumo Executivo e Remediação, com limitação de tokens e cache.
 - MITRE ATT&CK® quando disponível nos backends.
-- Exportar PDF nos módulos e página de resultados.
 - Histórico de análises com limpeza total via botão.
+- News diárias de Cybersecurity na barra lateral (CaveiraTech) com cache e fallback.
+- Página Início com guia de uso rápido; FAQ com instruções de chaves (Groq recomendado).
 
 ## Tecnologias
 - Backend: Python 3.12, Quart
@@ -94,6 +95,9 @@ The APEX/
 ├── .dockerignore
 └── README.md
 ```
+
+## Limitações Conhecidas
+- Exportação de PDF está desativada no momento (opção removida da UI).
 
 ## Licença
 MIT.

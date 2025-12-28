@@ -213,3 +213,46 @@ body {
 .font-monospace { font-family: 'Consolas', monospace; }
 .btn-primary { background: var(--accent-color); color: white; border: none; padding: 8px 16px; border-radius: 4px; text-decoration: none; display: inline-block; }
 .btn-sm { font-size: 12px; padding: 4px 8px; }
+
+@page {
+    size: A4;
+    margin: 15mm;
+}
+
+@media print {
+    body {
+        background: #fff !important;
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    .sidebar, .alert, .action-btn {
+        display: none !important;
+    }
+    .main-content {
+        margin: 0 !important;
+        padding: 0 10mm !important;
+        width: 100% !important;
+        overflow: visible !important;
+    }
+    .glass-card {
+        background: #fff !important;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        page-break-inside: auto;
+        break-inside: auto;
+    }
+    table, pre {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    .page-break {
+        display: block;
+        break-after: page;
+        page-break-after: always;
+        height: 0;
+        border: 0;
+        margin: 0;
+        padding: 0;
+    }
+}

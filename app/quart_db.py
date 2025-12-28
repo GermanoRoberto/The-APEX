@@ -100,7 +100,7 @@ def save_analysis(result: dict) -> int:
     Thread-safe e Context-safe: Cria uma nova conexão para cada chamada
     para evitar conflitos de thread e dependência de 'g'.
     """
-    item_identifier = result.get('filename') or result.get('url')
+    item_identifier = result.get('filename') or result.get('url') or result.get('network_cidr') or result.get('item_identifier')
     if not item_identifier:
         logger.error(f"Erro ao salvar análise: item_identifier ausente. Dados parciais: {list(result.keys())}")
         return -1
@@ -109,14 +109,14 @@ def save_analysis(result: dict) -> int:
         # Usa Context Manager para garantir conexão limpa e fechamento
         with DatabaseConnection() as db:
             cursor = db.cursor()
-            item_type = result.get('item_type') or ('file' if 'sha256' in result else ('url' if result.get('url') else 'unknown'))
+            item_type = result.get('item_type') or ('file' if 'sha256' in result else ('url' if result.get('url') else ('network' if result.get('network_cidr') else 'unknown')))
             cursor.execute(
                 'INSERT INTO analyses (item_identifier, item_type, final_verdict, created_at, external_results, ai_analysis, mitre_attack) VALUES (?, ?, ?, ?, ?, ?, ?)',
                 (
                     item_identifier,
                     item_type,
                     result.get('final_verdict', 'unknown'),
-                    result.get('scanned_at', time.time()),
+                    float(result.get('scanned_at', time.time())),
                     json.dumps(result.get('external', {})),
                     json.dumps(result.get('ai_analysis', {})),
                     json.dumps(result.get('mitre_attack', {}))

@@ -6,9 +6,6 @@
 <div class="header">
     <h1>Resultado da Análise</h1>
     <p style="color: var(--text-secondary);">Detalhes completos da investigação.</p>
-    <div style="margin-top:10px;">
-        <button class="action-btn" onclick="window.print()">🖨️ Exportar PDF</button>
-    </div>
 </div>
 
 <!-- Resumo Executivo -->
@@ -106,6 +103,7 @@
         {% endif %}
     </div>
 </div>
+<div class="page-break"></div>
 
 {% if analysis.item_type != 'network' %}
 <div class="glass-card" style="margin-top: 20px;">
@@ -137,6 +135,7 @@
     </div>
 </div>
 {% endif %}
+<div class="page-break"></div>
 
 {% if analysis.item_type != 'network' and analysis.external %}
 <div class="glass-card" style="margin-top: 20px;">
@@ -179,6 +178,7 @@
     </div>
 </div>
 {% endif %}
+<div class="page-break"></div>
 
 {% if analysis.item_type != 'network' %}
 <div class="glass-card" style="margin-top: 20px;">
@@ -192,6 +192,7 @@
     </div>
 </div>
 {% endif %}
+<div class="page-break"></div>
 
 <div style="margin-top: 20px; display: flex; gap: 15px;">
     <a href="{{ url_for('main.inicio') }}" class="action-btn" style="text-decoration: none; background-color: var(--glass-border);">🏠 Voltar ao Início</a>
@@ -203,6 +204,10 @@
 {% block head %}
 <style>
 @media print {
+    @page {
+        size: A4 portrait;
+        margin: 12mm;
+    }
     body {
         background: #fff !important;
     }
@@ -221,10 +226,19 @@
         background: #fff !important;
         border: 1px solid #ccc !important;
         box-shadow: none !important;
+        page-break-inside: avoid !important;
+    }
+    table, tr, td, th {
+        page-break-inside: avoid !important;
     }
     .action-btn {
         display: none !important;
     }
+}
+
+.page-break {
+    break-after: page;
+    page-break-after: always;
 }
 </style>
 {% endblock %}

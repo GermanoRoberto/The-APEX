@@ -5,7 +5,7 @@ Rotas principais da aplicação (páginas web).
 Este arquivo foi criado para corrigir o erro 'RuntimeError: Working outside of application context',
 que ocorre ao usar funções síncronas do Flask (como render_template) em um ambiente assíncrono do Quart.
 """
-from quart import Blueprint, render_template, current_app, request, redirect, url_for
+from quart import Blueprint, render_template, current_app, request, redirect, url_for, send_file
 from . import quart_db as database, services, utils
 import logging
 import markdown
@@ -39,6 +39,14 @@ def markdown_filter(text):
 @main_bp.app_context_processor
 def inject_csrf_token():
     return dict(csrf_token=utils.generate_csrf_token)
+
+@main_bp.app_context_processor
+def inject_news():
+    try:
+        latest = services.get_latest_news(limit=3)
+    except Exception:
+        latest = []
+    return dict(latest_news=latest)
 
 @main_bp.route('/')
 async def root():
@@ -114,6 +122,24 @@ async def results(report_id):
     except Exception as e:
         logger.error(f"Erro ao renderizar resultados para ID {report_id}: {e}", exc_info=True)
         return "Erro interno ao processar resultados.", 500
+
+@main_bp.route('/results/<report_id>/pdf')
+async def results_pdf(report_id):
+    try:
+        analysis = database.get_analysis(report_id)
+        if not analysis:
+            return "Relatório não encontrado.", 404
+        data = services.build_pdf_for_analysis(analysis)
+        import tempfile
+        import os
+        fd, path = tempfile.mkstemp(prefix=f"apex_report_{report_id}_", suffix=".pdf")
+        os.close(fd)
+        with open(path, "wb") as f:
+            f.write(data)
+        return await send_file(path, as_attachment=True, download_name=f"apex_report_{report_id}.pdf")
+    except Exception as e:
+        logger.error(f"Erro ao gerar PDF para ID {report_id}: {e}", exc_info=True)
+        return "Erro ao gerar PDF.", 500
 
 @main_bp.route('/faq')
 async def faq():

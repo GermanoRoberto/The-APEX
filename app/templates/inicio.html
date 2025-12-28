@@ -5,11 +5,22 @@
 {% block content %}
 <div class="header">
     <h1>Início</h1>
-    <p style="color: var(--text-secondary);">Página principal com informações gerais.</p>
+    <p style="color: var(--text-secondary);">Guia rápido de uso da plataforma e acesso aos módulos.</p>
 </div>
 
 <div class="glass-card">
-    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Sobre os Módulos</h3>
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Como usar</h3>
+    <div style="margin-top: 15px; line-height: 1.6; color: var(--text-primary);">
+        <ol style="padding-left: 18px;">
+            <li>Abra Configurações e informe suas chaves de API. Recomenda-se usar IA com Groq.</li>
+            <li>Escolha um módulo na barra lateral e execute a análise.</li>
+            <li>Abra o histórico e visualize o relatório detalhado com exportação em PDF.</li>
+        </ol>
+        <p style="margin-top: 10px; color: var(--text-secondary);">
+            Em caso de dúvidas sobre chaves, consulte a página FAQ.
+        </p>
+    </div>
+    <h3 style="margin-top: 20px; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Módulos</h3>
     <div style="display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 15px; line-height: 1.6;">
         <div>
             <h4 style="margin: 0 0 8px 0; color: #fff;">🛡️ Malware Analyzer</h4>
@@ -54,5 +65,13 @@
     <div style="margin-top: 20px; color: var(--text-secondary);">
         Status de chaves: {{ (key_status.status if key_status and key_status.status is defined) or 'Indisponível' }}
     </div>
+</div>
+<div class="glass-card">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Dicas Rápidas</h3>
+    <ul style="color: var(--text-primary); padding-left: 18px;">
+        <li>Groq para IA é a opção recomendada pela performance e custo.</li>
+        <li>VirusTotal exige cadastro e chave pessoal.</li>
+        <li>Exportação de PDF via botão “Gerar PDF (servidor)” garante paginação.</li>
+    </ul>
 </div>
 {% endblock %}
