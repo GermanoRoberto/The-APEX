@@ -15,7 +15,9 @@ body {
     display: flex;
     height: 100vh;
     overflow: hidden;
-    background-image: radial-gradient(circle at 10% 20%, rgba(76, 76, 255, 0.1) 0%, transparent 20%);
+    background-image:
+        linear-gradient(120deg, rgba(123, 92, 255, 0.25), rgba(255, 106, 136, 0.15)),
+        radial-gradient(circle at 10% 20%, rgba(76, 76, 255, 0.1) 0%, transparent 20%);
 }
 
 /* Sidebar */
@@ -94,12 +96,42 @@ body {
     margin-top: 6px;
 }
 
+.hero-card {
+    border-radius: 20px;
+    padding: 20px;
+    color: #fff;
+    background: linear-gradient(135deg, #7b5cff 0%, #ff6a88 50%, #ffd166 100%);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+}
+.hero-card h3 {
+    margin: 0 0 8px 0;
+    font-weight: 700;
+}
+.hero-card p {
+    margin: 0 0 12px 0;
+    color: rgba(255,255,255,0.9);
+}
+.hero-actions {
+    display: flex;
+    gap: 10px;
+}
+.footer {
+    margin-top: 20px;
+    padding: 12px 0;
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 .glass-card {
     background: var(--glass-bg);
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
     border: 1px solid var(--glass-border);
-    border-radius: 16px;
+    border-radius: 20px;
     padding: 25px;
     margin-bottom: 20px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);

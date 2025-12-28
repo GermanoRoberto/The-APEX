@@ -12,6 +12,13 @@
 
 {% if module == 'malware' or not module %}
 <div id="module-malware" class="module-section">
+    <div class="hero-card" style="margin-bottom: 20px;">
+        <h3>Malware Analyzer</h3>
+        <p>Faça upload de um arquivo e receba uma análise técnica com resumo por IA.</p>
+        <div class="hero-actions">
+            <button class="action-btn" onclick="document.getElementById('file-upload').click()">Começar</button>
+        </div>
+    </div>
     <div class="glass-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <span id="status-badge-malware" class="status-badge status-idle">Aguardando Arquivo</span>
@@ -33,6 +40,13 @@
 
 {% if module == 'network' %}
 <div id="module-network" class="module-section">
+    <div class="hero-card" style="margin-bottom: 20px;">
+        <h3>Network Monitor</h3>
+        <p>Descubra dispositivos, portas e serviços expostos na sua rede.</p>
+        <div class="hero-actions">
+            <button class="action-btn" onclick="runNetworkScan()">Iniciar Varredura</button>
+        </div>
+    </div>
     <div class="glass-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <span id="status-badge-network" class="status-badge status-idle">Pronto</span>
@@ -54,6 +68,13 @@
 
 {% if module == 'audit' %}
 <div id="module-audit" class="module-section">
+    <div class="hero-card" style="margin-bottom: 20px;">
+        <h3>Windows Audit</h3>
+        <p>Avalie configurações essenciais e identifique riscos para hardening.</p>
+        <div class="hero-actions">
+            <button class="action-btn" onclick="runAudit()">Executar Auditoria</button>
+        </div>
+    </div>
     <div class="glass-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <span id="status-badge-audit" class="status-badge status-idle">Pronto</span>
