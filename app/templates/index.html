@@ -1,17 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
-<<<<<<< HEAD
-=======
-<div class="header">
-    <h1 id="module-title">
-        {% if module == 'network' %}Network Monitor{% elif module == 'audit' %}Windows Audit{% elif module == 'soc' %}Alert Correlator{% else %}Malware Analyzer{% endif %}
-    </h1>
-    <p style="color: var(--text-secondary);">
-        {% if module == 'network' %}Monitoramento de Rede{% elif module == 'audit' %}Auditoria Windows{% elif module == 'soc' %}Correlação de Alertas (SOC Lab){% else %}Módulo de Segurança Ativa{% endif %}
-    </p>
-</div>
->>>>>>> 1e62ff9d1acb8b72e8044b13d0815c9334407293
 
 {% if module == 'malware' or not module %}
 <div id="module-malware" class="module-section">

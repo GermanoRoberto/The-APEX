@@ -107,9 +107,6 @@ async def analyze_file():
 @utils.log_execution
 @api_bp.route('/correlation/alerts', methods=['POST'])
 async def correlation_alerts():
-<<<<<<< HEAD
-    return jsonify({'error': 'Módulo desabilitado'}), 403
-=======
     try:
         if not await check_csrf():
             return jsonify({'error': 'Token de segurança inválido (CSRF).'}), 403
@@ -121,7 +118,6 @@ async def correlation_alerts():
     except Exception as e:
         logger.error(f"Erro na correlação de alertas: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
->>>>>>> 1e62ff9d1acb8b72e8044b13d0815c9334407293
 
 @utils.log_execution
 @api_bp.route('/analyze/url', methods=['POST'])
