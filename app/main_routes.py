@@ -91,8 +91,11 @@ async def inicio():
                             stats['chart_data'][6 - days_ago] += 1
                     except (ValueError, TypeError):
                         continue
+        
+        # Busca CVEs em destaque para o dashboard
+        featured_cves = services.get_featured_cves(limit=5)
 
-        return await render_template('inicio.html', key_status=key_status, stats=stats)
+        return await render_template('inicio.html', key_status=key_status, stats=stats, featured_cves=featured_cves)
 
     except Exception as e:
         logger.error(f"Erro na rota /inicio: {e}", exc_info=True)
@@ -144,6 +147,27 @@ async def results(report_id):
     if not analysis:
         return await render_template('base.html', content="<div class='glass-card'><h1>404</h1><p>Relatório não encontrado.</p></div>"), 404
     return await render_template('results.html', analysis=analysis, report_id=report_id)
+
+@main_bp.route('/results/<report_id>/pdf')
+async def download_pdf(report_id):
+    """Gera e envia o relatório em formato PDF."""
+    from quart import send_file
+    analysis = database.get_analysis(report_id)
+    if not analysis:
+        return "Relatório não encontrado.", 404
+    
+    try:
+        pdf_buffer = await services.build_pdf_for_analysis(analysis)
+        filename = f"TheAPEX_Report_{report_id}.pdf"
+        return await send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            attachment_filename=filename
+        )
+    except Exception as e:
+        logger.error(f"Erro ao gerar PDF para {report_id}: {e}")
+        return f"Erro ao gerar PDF: {e}", 500
 
 @main_bp.route('/faq')
 async def faq():

@@ -3,28 +3,34 @@
 {% block title %}Resultado da Análise{% endblock %}
 
 {% block content %}
-<div class="header">
-    <h1>Resultado da Análise</h1>
-    <p style="color: var(--text-secondary);">Detalhes completos da investigação.</p>
+<div class="header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h1>Resultado da Análise</h1>
+        <p style="color: var(--text-secondary);">Detalhes completos da investigação.</p>
+    </div>
+    <a href="{{ url_for('main.download_pdf', report_id=report_id) }}" class="btn-action" style="text-decoration: none; display: flex; align-items: center; gap: 8px;">
+        <i class="bi bi-file-earmark-pdf-fill"></i> Baixar PDF
+    </a>
 </div>
 
 <!-- Resumo Executivo -->
-<div class="glass-card">
-    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Resumo Executivo</h3>
-    <div style="margin-top: 15px; line-height: 1.6;">
-        {% if analysis.ai_analysis and analysis.ai_analysis.summary %}
-            {{ analysis.ai_analysis.summary | markdown }}
-        {% else %}
-            <p style="color: var(--text-secondary);">A análise por IA não foi gerada para este item.</p>
-        {% endif %}
+<details open>
+    <summary>📄 Resumo Executivo</summary>
+    <div class="details-content">
+        <div style="line-height: 1.6;">
+            {% if analysis.ai_analysis and analysis.ai_analysis.summary %}
+                {{ analysis.ai_analysis.summary | markdown }}
+            {% else %}
+                <p style="color: var(--text-secondary);">A análise por IA não foi gerada para este item.</p>
+            {% endif %}
+        </div>
     </div>
-</div>
+</details>
 
 <!-- Detalhes Técnicos -->
-<div class="glass-card" style="margin-top: 20px;">
-    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Detalhes Técnicos</h3>
-    
-    <div style="margin-top: 15px;">
+<details open>
+    <summary>🛠️ Detalhes Técnicos</summary>
+    <div class="details-content">
         <div style="display: grid; grid-template-columns: 200px 1fr; gap: 10px; margin-bottom: 10px;">
             <div style="color: var(--text-secondary); font-weight: 600;">Identificador:</div>
             <div style="font-family: 'Consolas', monospace; word-break: break-all;">{{ analysis.item_identifier }}</div>
@@ -52,7 +58,62 @@
             <div>{{ analysis.created_at | int | strftime('%d/%m/%Y %H:%M:%S') }}</div>
         </div>
         
-        {% if analysis.item_type == 'network' %}
+        {% if analysis.item_type == 'file' %}
+        <div style="margin-top: 20px;">
+            <h4 style="color: #fff; margin-bottom: 10px;">📄 Detalhes do Arquivo</h4>
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                <p><strong>Nome do Arquivo:</strong> {{ analysis.filename }}</p>
+                <p><strong>SHA256:</strong> <code style="color: var(--accent-color);">{{ analysis.sha256 }}</code></p>
+                <p><strong>Tamanho:</strong> {{ analysis.size_bytes }} bytes</p>
+                {% if analysis.tags %}
+                <p><strong>Tags:</strong> 
+                    {% for tag in analysis.tags %}
+                        <span class="badge bg-info">{{ tag }}</span>
+                    {% endfor %}
+                </p>
+                {% endif %}
+            </div>
+
+            {% if analysis.pe_analysis %}
+            <details style="margin-top: 15px;">
+                <summary>🔍 Análise de Executável (PE)</summary>
+                <div class="details-content">
+                    <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                        <p><strong>DLL Side Loading:</strong> {{ 'Detectado' if analysis.pe_analysis.dll_side_loading else 'Não Detectado' }}</p>
+                        <p><strong>In-Memory Execution:</strong> {{ 'Detectado' if analysis.pe_analysis.in_memory_execution else 'Não Detectado' }}</p>
+                        <p><strong>Dead Drop Resolver:</strong> {{ 'Detectado' if analysis.pe_analysis.dead_drop_resolver else 'Não Detectado' }}</p>
+                        {% if analysis.pe_analysis.details %}
+                        <ul style="color: var(--text-secondary); margin-top: 10px;">
+                            {% for detail in analysis.pe_analysis.details %}
+                                <li>{{ detail }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                </div>
+            </details>
+            {% endif %}
+
+            {% if analysis.strings_snippet %}
+            <details style="margin-top: 15px;">
+                <summary>📜 Strings Extraídas (Snippet)</summary>
+                <div class="details-content">
+                    <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; color: #ccc; white-space: pre-wrap;">{{ analysis.strings_snippet }}</div>
+                </div>
+            </details>
+            {% endif %}
+        </div>
+
+        {% elif analysis.item_type == 'url' %}
+        <div style="margin-top: 20px;">
+            <h4 style="color: #fff; margin-bottom: 10px;">🌐 Detalhes da URL</h4>
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                <p><strong>URL Analisada:</strong> <a href="{{ analysis.url }}" target="_blank" style="color: var(--accent-color);">{{ analysis.url }}</a></p>
+                <p><strong>Data da Varredura:</strong> {{ analysis.scanned_at | int | strftime('%d/%m/%Y %H:%M:%S') }}</p>
+            </div>
+        </div>
+
+        {% elif analysis.item_type == 'network' %}
         <div style="margin-top: 20px;">
             <h4 style="color: #fff; margin-bottom: 10px;">Dispositivos Descobertos</h4>
             <div style="overflow-x: auto;">
@@ -98,7 +159,199 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4" style="text-align:center; color: var(--text-secondary);">Nenhum dispositivo ativo foi descoberto.</td>
+                            <td colspan="5" style="text-align:center; color: var(--text-secondary);">Nenhum dispositivo ativo foi descoberto.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif analysis.item_type == 'audit' %}
+        <div style="margin-top: 20px;">
+            <h4 style="color: #fff; margin-bottom: 10px;">🛡️ Detalhes da Auditoria Windows</h4>
+            {% set scan = analysis.external.scan_details %}
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="margin-top: 0; color: var(--accent-color);">🖥️ Informações da Máquina</h5>
+                    <p><strong>Hostname:</strong> {{ scan.machine.hostname }}</p>
+                    <p><strong>OS:</strong> {{ scan.machine.os }}</p>
+                    <p><strong>IP Primário:</strong> {{ scan.machine.ip_primary }}</p>
+                    <p><strong>MAC:</strong> {{ scan.machine.mac_address }}</p>
+                </div>
+                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <h5 style="margin-top: 0; color: var(--accent-color);">📊 Resumo da Varredura</h5>
+                    <p><strong>Processos Analisados:</strong> {{ scan.processes_count }}</p>
+                    <p><strong>Serviços em Execução:</strong> {{ scan.services_running }}</p>
+                    <p><strong>Veredito de Reputação:</strong> 
+                        <span class="badge {% if 'suspicious' in (scan.ai_reputation|lower) %}bg-warning{% else %}bg-success{% endif %}">
+                            {{ 'Suspeito' if 'suspicious' in (scan.ai_reputation|lower) else 'Limpo' }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+
+            <details>
+                <summary>🛡️ Hardening do Sistema (Windows Defender)</summary>
+                <div class="details-content">
+                    <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px;">
+                            {% set hardening = scan.hardening %}
+                            {% if hardening is string %}
+                                {% set hardening = hardening | from_json %}
+                            {% endif %}
+                            {% for key, val in hardening.items() %}
+                                <div style="display: flex; justify-content: space-between; padding: 5px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                    <span style="color: var(--text-secondary);">{{ key }}:</span>
+                                    <span style="font-weight: bold; color: {% if val is sameas true %}#28a745{% elif val is sameas false %}#dc3545{% else %}#fff{% endif %};">
+                                        {{ 'Habilitado' if val is sameas true else ('Desabilitado' if val is sameas false else val) }}
+                                    </span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details>
+                <summary>⚙️ Serviços em Execução</summary>
+                <div class="details-content">
+                    <div style="overflow-x: auto;">
+                        <table class="table">
+                            <thead><tr><th>Nome</th><th>Nome de Exibição</th><th>Status</th></tr></thead>
+                            <tbody>
+                                {% set services = scan.services_sample %}
+                                {% if not services and scan.services_running > 0 %}
+                                    {% set services = scan.services %}
+                                {% endif %}
+                                {% if services is string %}
+                                    {% set services = services | from_json %}
+                                {% endif %}
+                                {% for item in services %}
+                                <tr>
+                                    <td><strong>{{ item.Name }}</strong></td>
+                                    <td>{{ item.DisplayName }}</td>
+                                    <td><span class="badge bg-success">{{ item.Status }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>
+
+            <details>
+                <summary>🚀 Entradas de Inicialização (Startup)</summary>
+                <div class="details-content">
+                    <div style="overflow-x: auto;">
+                        <table class="table">
+                            <thead><tr><th>Nome</th><th>Comando</th><th>Usuário</th></tr></thead>
+                            <tbody>
+                                {% set startup = startup_entries %}
+                                {% if not startup and scan.startup_entries %}
+                                    {% set startup = scan.startup_entries %}
+                                {% endif %}
+                                {% if startup is string %}
+                                    {% set startup = startup | from_json %}
+                                {% endif %}
+                                {% for item in startup %}
+                                <tr>
+                                    <td><strong>{{ item.Name }}</strong></td>
+                                    <td><small style="font-family: monospace; word-break: break-all;">{{ item.Command }}</small></td>
+                                    <td>{{ item.User or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>
+
+            <details>
+                <summary>🔍 Processos em Execução (Principais)</summary>
+                <div class="details-content">
+                    <div style="overflow-x: auto;">
+                        <table class="table">
+                            <thead><tr><th>Nome</th><th>PID</th><th>CPU</th><th>Memória (MB)</th></tr></thead>
+                            <tbody>
+                                {% set processes = scan.processes_sample %}
+                                {% if processes is string %}
+                                    {% set processes = processes | from_json %}
+                                {% endif %}
+                                {% for item in processes %}
+                                <tr>
+                                    <td><strong>{{ item.Name }}</strong></td>
+                                    <td>{{ item.Id }}</td>
+                                    <td>{{ "%.2f"|format(item.CPU or 0) }}%</td>
+                                    <td>{{ "%.2f"|format((item.WorkingSet64 or 0) / 1024 / 1024) }} MB</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>
+        </div>
+        {% elif analysis.item_type == 'vault' %}
+        <div style="margin-top: 20px;">
+            <h4 style="color: #fff; margin-bottom: 10px;">Credenciais no Windows Vault</h4>
+            <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                <div class="badge bg-info">Total: {{ analysis.external.total_entries }}</div>
+                <div class="badge bg-danger">Suspeitas: {{ analysis.external.suspicious_count }}</div>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead><tr><th>Alvo (Target)</th><th>Tipo</th><th>Usuário</th></tr></thead>
+                    <tbody>
+                        {% for entry in analysis.external.entries %}
+                        <tr {% if entry.target.startswith('http') or '.' in entry.target %}style="background: rgba(220, 53, 69, 0.1);"{% endif %}>
+                            <td><strong>{{ entry.target }}</strong></td>
+                            <td>{{ entry.type }}</td>
+                            <td>{{ entry.user }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% elif analysis.item_type == 'soc' %}
+        <div style="margin-top: 20px;">
+            <h4 style="color: #fff; margin-bottom: 10px;">🕵️ Correlação de Incidentes (SOC)</h4>
+            {% set correlation = analysis.external.correlation %}
+            <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid var(--glass-border); margin-bottom: 20px;">
+                <p><strong>Janela de Tempo:</strong> {{ correlation.window }} minutos</p>
+                <p><strong>Limite de Alertas:</strong> {{ correlation.threshold }} eventos</p>
+                <p><strong>Total de Incidentes Identificados:</strong> {{ correlation.incidents | length }}</p>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Entidade</th>
+                            <th>Alertas</th>
+                            <th>Fontes</th>
+                            <th>Gravidade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for incident in correlation.incidents %}
+                        <tr>
+                            <td>
+                                <span class="badge bg-secondary">{{ incident.entity.type | upper }}</span><br>
+                                <strong>{{ incident.entity.value }}</strong>
+                            </td>
+                            <td>{{ incident.count }}</td>
+                            <td>{{ incident.sources | join(', ') }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if incident.severity == 'high' %}bg-danger
+                                    {% elif incident.severity == 'medium' %}bg-warning
+                                    {% else %}bg-info{% endif %}">
+                                    {{ incident.severity | upper }}
+                                </span>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -107,13 +360,14 @@
         </div>
         {% endif %}
     </div>
-</div>
+</details>
 <div class="page-break"></div>
 
 {% if analysis.item_type != 'network' %}
-<div class="glass-card" style="margin-top: 20px;">
-    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Táticas e Técnicas do MITRE ATT&CK®</h3>
-    <div style="margin-top: 15px;">
+<!-- MITRE ATT&CK -->
+<details open>
+    <summary>🎯 Táticas e Técnicas do MITRE ATT&CK®</summary>
+    <div class="details-content">
         {% if analysis.mitre_attack and analysis.mitre_attack is iterable and analysis.mitre_attack is not string %}
             {% for tactic_info in analysis.mitre_attack %}
                 <div style="margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
@@ -138,14 +392,14 @@
             <p style="color: var(--text-secondary);">Nenhuma informação do MITRE ATT&CK foi encontrada para este item.</p>
         {% endif %}
     </div>
-</div>
+</details>
 {% endif %}
-<div class="page-break"></div>
 
 {% if analysis.item_type != 'network' and analysis.external %}
-<div class="glass-card" style="margin-top: 20px;">
-    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Resultados por Ferramenta</h3>
-    <div style="margin-top: 15px;">
+<!-- Resultados por Ferramenta -->
+<details>
+    <summary>🔍 Resultados por Ferramenta</summary>
+    <div class="details-content">
         <div style="overflow-x: auto;">
             <table class="table">
                 <thead>
@@ -181,21 +435,23 @@
             </table>
         </div>
     </div>
-</div>
+</details>
 {% endif %}
-<div class="page-break"></div>
 
 {% if analysis.item_type != 'network' %}
-<div class="glass-card" style="margin-top: 20px;">
-    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">Orientações de Remediação</h3>
-    <div style="margin-top: 15px; line-height: 1.6;">
-        {% if analysis.ai_analysis and analysis.ai_analysis.remediation %}
-            {{ analysis.ai_analysis.remediation | markdown }}
-        {% else %}
-            <p style="color: var(--text-secondary);">As recomendações de remediação serão apresentadas quando a análise por IA estiver configurada.</p>
-        {% endif %}
+<!-- Orientações de Remediação -->
+<details open>
+    <summary>🛡️ Orientações de Remediação</summary>
+    <div class="details-content">
+        <div style="line-height: 1.6;">
+            {% if analysis.ai_analysis and analysis.ai_analysis.remediation %}
+                {{ analysis.ai_analysis.remediation | markdown }}
+            {% else %}
+                <p style="color: var(--text-secondary);">As recomendações de remediação serão apresentadas quando a análise por IA estiver configurada.</p>
+            {% endif %}
+        </div>
     </div>
-</div>
+</details>
 {% endif %}
 <div class="page-break"></div>
 
@@ -208,6 +464,52 @@
 
 {% block head %}
 <style>
+    /* Estilos para seções colapsáveis */
+    details {
+        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    details[open] {
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    }
+    summary {
+        padding: 15px 20px;
+        cursor: pointer;
+        font-weight: 600;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        list-style: none;
+        user-select: none;
+        background: rgba(255, 255, 255, 0.02);
+    }
+    summary::-webkit-details-marker {
+        display: none;
+    }
+    summary::before {
+        content: '▶';
+        font-size: 0.8em;
+        transition: transform 0.3s ease;
+        color: var(--accent-color);
+        display: inline-block;
+    }
+    details[open] summary::before {
+        transform: rotate(90deg);
+    }
+    summary:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    .details-content {
+        padding: 20px;
+        border-top: 1px solid var(--glass-border);
+    }
+
 @media print {
     @page {
         size: A4 portrait;

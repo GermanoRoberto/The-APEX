@@ -21,7 +21,7 @@ The APEX é uma plataforma integrada de segurança construída em Python/Quart, 
 - Malware Analyzer: análise local e multi-fonte com veredito final e IA.
 - Network Monitor: descoberta de dispositivos, portas e serviços.
 - Windows Vault Audit: Auditoria de credenciais do sistema em busca de riscos.
-- Threat Intelligence: Alertas de ameaças focados no Brasil com interpretação por IA.
+- Threat Intelligence: Alertas de ameaças nacionais via CTIR Gov com interpretação por IA.
 - SIEM Integration: Exportação automática de logs e alertas para Elastic Stack e Wazuh.
 
 ## Módulos
@@ -29,7 +29,7 @@ The APEX é uma plataforma integrada de segurança construída em Python/Quart, 
 - Malware Analyzer: análise de arquivos e URLs com veredito, Resumo Executivo + Orientações de Remediação.
 - Network Monitor: varredura rápida/Completa com tabela de dispositivos e serviços.
 - Auditoria de Sistema (Vault): Varredura de credenciais salvas no Windows para identificar exposições.
-- Alertas Brasil: Monitoramento de tendências de ameaças locais.
+- Alertas Brasil: Monitoramento de tendências de ameaças nacionais com integração direta ao CTIR Gov (Gabinete de Segurança Institucional da Presidência da República), focando nos 5 alertas mais recentes e interpretação inteligente por IA.
 - Configurações: Central de chaves de API e conexões SIEM.
 
 ## Funcionalidades
@@ -39,6 +39,8 @@ The APEX é uma plataforma integrada de segurança construída em Python/Quart, 
 - Otimização de Tokens: Pruning de dados e truncamento inteligente para evitar limites de API (Rate Limits).
 - Cache Inteligente: Respostas de IA cacheadas para economizar tokens em análises repetidas.
 - MITRE ATT&CK®: Mapeamento automático de táticas e técnicas em todas as análises.
+- Scraping de Fontes Oficiais: Integração nativa com o portal de alertas do CTIR Gov para inteligência de ameaças brasileira.
+- Cache Buster: Mecanismo de atualização forçada no frontend para garantir dados em tempo real sem dependência de cache de navegador.
 - Docker-Compose Full: Inclui stack completa de Elastic (Elasticsearch + Kibana) e Wazuh (Manager + Dashboard).
 - Histórico de análises com limpeza total via botão.
 - News diárias de Cybersecurity na barra lateral (CaveiraTech) com cache e fallback.
