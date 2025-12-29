@@ -1,8 +1,11 @@
-# 🛡️ The APEX — Plataforma de Segurança com IA (v4.0)
+# 🛡️ The APEX — Plataforma de Segurança com IA (v1.0)
 
 The APEX é uma plataforma integrada de segurança cibernética de alta performance, projetada para consolidar análise de ameaças, monitoramento de ativos e inteligência nacional em uma única interface moderna e totalmente assíncrona. Utilizando o que há de mais avançado em IA (Groq, Gemini, OpenAI) e integrações com fontes oficiais (CTIR Gov), o APEX transforma dados brutos de segurança em insights estratégicos acionáveis.
 
-<img width="1883" height="901" alt="Captura de tela 2025-12-29 094713" src="https://github.com/user-attachments/assets/1c4b8720-23a6-4f59-8f6d-f1de834e770d" />
+<img width="1883" height="902" alt="Captura de tela 2025-12-29 135211" src="https://github.com/user-attachments/assets/502ba01d-8118-4618-9102-344f6fae68b2" />
+
+<img width="1914" height="904" alt="Captura de tela 2025-12-29 135300" src="https://github.com/user-attachments/assets/635ccd22-0289-400e-bf3c-2a27f8034549" />
+
 
 🧭 Índice
 - [Descrição](#-descrição)
