@@ -321,6 +321,8 @@ def _process_vt_response(response_json: dict) -> dict:
             "found": True,
             "verdict": verdict,
             "score": round(score, 2),
+            "categories": attrs.get("categories", {}),
+            "title": attrs.get("title"),
             "details": {
                 "stats": stats,
                 "results": attrs.get("last_analysis_results", {})

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhes da Auditoria Windows{% endblock %}
+
+{% block content %}
+<div class="header">
+    <h1>Detalhes da Auditoria Windows</h1>
+    <p style="color: var(--text-secondary);">Registro detalhado de hardware e sistema.</p>
+</div>
+
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('main.history') }}" class="action-btn" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+        <i class="bi bi-arrow-left"></i> Voltar ao Histórico
+    </a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <!-- Informações da Máquina -->
+    <div class="glass-card">
+        <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">
+            <i class="bi bi-pc-display" style="color: var(--accent-color);"></i> Identificação da Máquina
+        </h3>
+        <div style="margin-top: 15px;">
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Hostname:</div>
+                <div style="font-weight: bold;">{{ audit.machine_info.hostname or 'N/A' }}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Endereço IP:</div>
+                <div>{{ audit.machine_info.ip or 'N/A' }}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Endereço MAC:</div>
+                <div style="font-family: monospace;">{{ audit.machine_info.mac or 'N/A' }}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Hardware ID:</div>
+                <div style="font-family: monospace; font-size: 11px; word-break: break-all; color: var(--accent-color);">{{ audit.hardware_id }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumo do Evento -->
+    <div class="glass-card">
+        <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">
+            <i class="bi bi-info-circle" style="color: var(--accent-color);"></i> Resumo do Registro
+        </h3>
+        <div style="margin-top: 15px;">
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Tipo de Evento:</div>
+                <div><span class="badge bg-secondary">{{ audit.event_type }}</span></div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Status:</div>
+                <div>
+                    <span class="badge 
+                        {% if audit.status == 'ALERT' %}bg-danger
+                        {% elif audit.status == 'OK' %}bg-success
+                        {% else %}bg-secondary{% endif %}">
+                        {{ audit.status }}
+                    </span>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Data/Hora:</div>
+                <div>{{ audit.created_at | int | strftime('%d/%m/%Y %H:%M:%S') }}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Integridade:</div>
+                <div>
+                    {% if audit.integrity_valid %}
+                        <span style="color: #4caf50;"><i class="bi bi-shield-check"></i> Válida (SHA-256)</span>
+                    {% else %}
+                        <span style="color: #f44336;"><i class="bi bi-shield-slash"></i> CORROMPIDA/ALTERADA</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px; margin-bottom: 10px;">
+                <div style="color: var(--text-secondary); font-weight: 600;">Proteção:</div>
+                <div>
+                    {% if audit.is_encrypted %}
+                        <span style="color: var(--accent-color);"><i class="bi bi-lock-fill"></i> Criptografado (Fernet)</span>
+                    {% else %}
+                        <span style="color: var(--text-secondary);"><i class="bi bi-unlock"></i> Texto Plano</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dados Detalhados -->
+<div class="glass-card" style="margin-top: 20px;">
+    <h3 style="margin-top: 0; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">
+        <i class="bi bi-file-earmark-text" style="color: var(--accent-color);"></i> Dados Auditados
+    </h3>
+    <div style="margin-top: 15px;">
+        {% if audit.details_decrypted %}
+            <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
+                <pre style="white-space: pre-wrap; margin: 0; color: #e0e0e0; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.5;">{{ audit.details_decrypted | tojson(indent=2) }}</pre>
+            </div>
+        {% else %}
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                <i class="bi bi-exclamation-triangle" style="font-size: 48px; display: block; margin-bottom: 10px;"></i>
+                Não foi possível carregar os detalhes do evento.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Rodapé de Auditoria -->
+<div style="margin-top: 20px; font-size: 11px; color: var(--text-secondary); text-align: center;">
+    Hash de Integridade: <span style="font-family: monospace;">{{ audit.integrity_hash }}</span>
+</div>
+{% endblock %}

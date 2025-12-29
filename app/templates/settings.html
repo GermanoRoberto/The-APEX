@@ -60,6 +60,47 @@
             </div>
         </div>
 
+        <!-- Seção de Integrações SIEM/SOAR -->
+        <div style="margin-bottom: 30px;">
+            <h3 style="margin-bottom: 15px; font-weight: 400; color: #fff; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">
+                Integrações SIEM/SOAR (Elastic & Wazuh Gratuitos)
+            </h3>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <!-- Elastic -->
+                <div class="mb-3">
+                    <label for="ELASTIC_API_KEY" class="form-label">Elastic API Key</label>
+                    <input type="password" class="form-control" id="ELASTIC_API_KEY" name="ELASTIC_API_KEY" placeholder="API Key do seu Elastic local">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                        Chave atual: <span class="font-monospace">{{ key_status.ELASTIC_API_KEY }}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="ELASTIC_API_URL" class="form-label">Elasticsearch URL</label>
+                    <input type="text" class="form-control" id="ELASTIC_API_URL" name="ELASTIC_API_URL" placeholder="http://localhost:9200">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                        URL atual: <span class="font-monospace">{{ key_status.ELASTIC_API_URL }}</span>
+                    </div>
+                </div>
+                
+                <!-- Wazuh -->
+                <div class="mb-3">
+                    <label for="WAZUH_API_KEY" class="form-label">Wazuh API Key</label>
+                    <input type="password" class="form-control" id="WAZUH_API_KEY" name="WAZUH_API_KEY" placeholder="Token de autenticação do Wazuh">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                        Chave atual: <span class="font-monospace">{{ key_status.WAZUH_API_KEY }}</span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="WAZUH_API_URL" class="form-label">Wazuh API URL</label>
+                    <input type="text" class="form-control" id="WAZUH_API_URL" name="WAZUH_API_URL" placeholder="https://localhost:55000">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                        URL atual: <span class="font-monospace">{{ key_status.WAZUH_API_URL }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <button type="submit" class="action-btn" id="save-button" style="width: 100%;">
             <span id="btn-text">Salvar Alterações</span>
             <span id="btn-spinner" class="d-none" style="margin-left: 10px;">⏳</span>

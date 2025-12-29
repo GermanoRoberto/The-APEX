@@ -1,6 +1,6 @@
 # 🛡️ The APEX — Plataforma de Segurança com IA
 
-**Aplicação web assíncrona para análise de malware, monitoramento de rede e auditoria do Windows, com integração MITRE ATT&CK® e explicações por IA. Preparada para Docker e implantação simples.**
+**Aplicação web assíncrona para análise de malware e monitoramento de rede, com integração MITRE ATT&CK® e explicações por IA. Preparada para Docker e implantação simples.**
 
 ## Índice
 - Descrição
@@ -18,20 +18,22 @@
 The APEX é uma plataforma integrada de segurança construída em Python/Quart, que consolida:
 - Malware Analyzer: análise local e multi-fonte com veredito final e IA.
 - Network Monitor: descoberta de dispositivos, portas e serviços.
-- Windows Audit: auditoria de hardening, entradas de inicialização e tarefas ocultas.
-- Windows Vault: coleta automática das credenciais (Credential Manager) incluída no histórico.
+- Windows Vault Audit: Auditoria de credenciais do sistema em busca de riscos.
+- Threat Intelligence: Alertas de ameaças focados no Brasil com interpretação por IA.
 
 ## Módulos
 - Início: visão geral e acesso pelo menu aos módulos.
-- Malware Analyzer: análise de arquivos, veredito e Resumo Executivo + Orientações de Remediação.
+- Malware Analyzer: análise de arquivos e URLs com veredito, Resumo Executivo + Orientações de Remediação.
 - Network Monitor: varredura rápida/Completa com tabela de dispositivos e serviços.
-- Windows Audit: auditoria com nome da máquina, IP, programas recentes, inicialização, tarefas ocultas e reputação por processo (IA).
-- Windows Vault: coleta automática integrada à auditoria e historizada.
+- Auditoria de Sistema (Vault): Varredura de credenciais salvas no Windows para identificar exposições.
+- Alertas Brasil: Monitoramento de tendências de ameaças locais.
 
 ## Funcionalidades
 - Assíncrono com Quart e chamadas paralelas.
-- IA para Resumo Executivo e Remediação, com limitação de tokens e cache.
-- MITRE ATT&CK® quando disponível nos backends.
+- IA Multi-Provider: Suporte dinâmico para Groq, Gemini, OpenAI e xAI (Grok).
+- Otimização de Tokens: Pruning de dados e truncamento inteligente para evitar limites de API (Rate Limits).
+- Cache Inteligente: Respostas de IA cacheadas para economizar tokens em análises repetidas.
+- MITRE ATT&CK®: Mapeamento automático de táticas e técnicas em todas as análises.
 - Histórico de análises com limpeza total via botão.
 - News diárias de Cybersecurity na barra lateral (CaveiraTech) com cache e fallback.
 - Página Início com guia de uso rápido; FAQ com instruções de chaves (Groq recomendado).

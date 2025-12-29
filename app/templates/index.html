@@ -1,38 +1,51 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="header">
-    <h1 id="module-title">
-        {% if module == 'network' %}Network Monitor{% elif module == 'audit' %}Windows Audit{% else %}Malware Analyzer{% endif %}
-    </h1>
-    <p style="color: var(--text-secondary);">
-        {% if module == 'network' %}Monitoramento de Rede{% elif module == 'audit' %}Auditoria Windows{% else %}Módulo de Segurança Ativa{% endif %}
-    </p>
-</div>
 
 {% if module == 'malware' or not module %}
 <div id="module-malware" class="module-section">
-    <div class="hero-card" style="margin-bottom: 20px;">
-        <h3>Malware Analyzer</h3>
-        <p>Faça upload de um arquivo e receba uma análise técnica com resumo por IA.</p>
-        <div class="hero-actions">
-            <button class="action-btn" onclick="document.getElementById('file-upload').click()">Começar</button>
-        </div>
-    </div>
     <div class="glass-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <span id="status-badge-malware" class="status-badge status-idle">Aguardando Arquivo</span>
-            <div style="display: flex; gap: 10px;">
-                 <select id="ai-provider-malware" class="form-control" style="width: auto; margin-bottom: 0;" disabled>
-                    <option value="groq" selected>Groq Llama</option>
-                 </select>
-                <button class="action-btn" onclick="document.getElementById('file-upload').click()">📁 SELECIONAR ARQUIVO</button>
-                <input type="file" id="file-upload" style="display: none" onchange="handleFileSelect(this)">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid var(--glass-border);">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(220, 53, 69, 0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(220, 53, 69, 0.2);">
+                <i class="bi bi-bug-fill" style="color: #ff4d4d; font-size: 20px;"></i>
+            </div>
+            <div>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Malware Analyzer</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Análise profunda de artefatos suspeitos</p>
             </div>
         </div>
-        
-        <div class="console-output" id="output-malware">
-            Faça upload de um executável (.exe, .dll) ou script para análise estática e verificação com IA.
+
+        <!-- Upload de Arquivo -->
+        <div style="margin-bottom: 30px; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; color: #fff; font-size: 14px; font-weight: 600;">📁 Análise de Arquivo</h4>
+                <span id="status-badge-malware" class="status-badge status-idle">Aguardando</span>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                 <select id="ai-provider-malware" class="form-control" style="width: auto; margin-bottom: 0;" disabled title="Provedor de IA configurado automaticamente">
+                    <option value="groq" selected>Groq Llama</option>
+                 </select>
+                <button class="action-btn" onclick="document.getElementById('file-upload').click()" style="flex: 1;">SELECIONAR EXECUTÁVEL OU SCRIPT</button>
+                <input type="file" id="file-upload" style="display: none" onchange="handleFileSelect(this)">
+            </div>
+            <div class="console-output" id="output-malware" style="margin-top: 15px; font-size: 11px; color: var(--text-secondary); background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
+                <i class="bi bi-info-circle" style="margin-right: 5px;"></i> Suporta .exe, .dll, .py, .ps1, .bin
+            </div>
+        </div>
+
+        <!-- Análise de URL -->
+        <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; color: #fff; font-size: 14px; font-weight: 600;">🌐 Análise de URL</h4>
+                <span class="status-badge status-idle" id="status-badge-url">Pronto</span>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <input id="url-input" class="form-control" placeholder="https://exemplo.com/malware" style="flex: 1; margin-bottom: 0;">
+                <button class="action-btn" onclick="analyzeUrl()">ANALISAR URL</button>
+            </div>
+            <div class="console-output" id="output-url" style="margin-top: 15px; font-size: 11px; color: var(--text-secondary); background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
+                <i class="bi bi-shield-check" style="margin-right: 5px;"></i> Verificação em tempo real com reputação global.
+            </div>
         </div>
     </div>
 </div>
@@ -40,50 +53,185 @@
 
 {% if module == 'network' %}
 <div id="module-network" class="module-section">
-    <div class="hero-card" style="margin-bottom: 20px;">
-        <h3>Network Monitor</h3>
-        <p>Descubra dispositivos, portas e serviços expostos na sua rede.</p>
-        <div class="hero-actions">
-            <button class="action-btn" onclick="runNetworkScan()">Iniciar Varredura</button>
-        </div>
-    </div>
     <div class="glass-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <span id="status-badge-network" class="status-badge status-idle">Pronto</span>
-            <div style="display: flex; gap: 10px;">
-                <select id="network-mode" class="form-control" style="width: auto;">
-                    <option value="quick" selected>Rápida (descoberta de dispositivos)</option>
-                    <option value="full">Completa (portas e serviços)</option>
-                </select>
-                <input id="network-cidr" class="form-control" placeholder="CIDR (ex: 192.168.1.0/24)" style="width: 240px;">
-                <button class="action-btn" onclick="runNetworkScan()">📡 INICIAR SCAN DE REDE</button>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid var(--glass-border);">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(0, 123, 255, 0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 123, 255, 0.2);">
+                <i class="bi bi-broadcast-pin" style="color: var(--accent-color); font-size: 20px;"></i>
+            </div>
+            <div>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Network Monitor</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Varredura e enumeração de ativos de rede</p>
             </div>
         </div>
-        <div class="console-output" id="output-network">
-            Descoberta de dispositivos na rede e, opcionalmente, varredura de portas e serviços.
+
+        <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <span id="status-badge-network" class="status-badge status-idle">Pronto</span>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
+                    <select id="network-mode" class="form-control" style="width: auto;">
+                        <option value="quick" selected>Rápida (descoberta)</option>
+                        <option value="full">Completa (portas/serviços)</option>
+                    </select>
+                    <input id="network-cidr" class="form-control" placeholder="CIDR (ex: 192.168.1.0/24)" style="width: 200px;">
+                    <button class="action-btn" onclick="runNetworkScan()">📡 INICIAR SCAN</button>
+                </div>
+            </div>
+            <div class="console-output" id="output-network" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; min-height: 80px;">
+                Aguardando início do escaneamento...
+            </div>
         </div>
     </div>
 </div>
 {% endif %}
 
-{% if module == 'audit' %}
-<div id="module-audit" class="module-section">
-    <div class="hero-card" style="margin-bottom: 20px;">
-        <h3>Windows Audit</h3>
-        <p>Avalie configurações essenciais e identifique riscos para hardening.</p>
-        <div class="hero-actions">
-            <button class="action-btn" onclick="runAudit()">Executar Auditoria</button>
-        </div>
-    </div>
+{% if module == 'alerts' %}
+<div id="module-alerts" class="module-section">
     <div class="glass-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <span id="status-badge-audit" class="status-badge status-idle">Pronto</span>
-            <div style="display:flex; gap:10px;">
-                <button class="action-btn" onclick="runAudit()">💻 EXECUTAR AUDITORIA WINDOWS</button>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid var(--glass-border);">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(0, 212, 255, 0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 212, 255, 0.2);">
+                <i class="bi bi-geo-alt-fill" style="color: #00d4ff; font-size: 20px;"></i>
+            </div>
+            <div>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Alertas Brasil</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Tendências e inteligência de ameaças nacionais</p>
             </div>
         </div>
-        <div class="console-output" id="output-audit">
-            Verificação de políticas de segurança, updates pendentes e configurações de hardening.
+
+        <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <span class="status-badge status-idle" id="status-badge-alerts">Pronto</span>
+                <div style="display:flex; gap:10px;">
+                    <button class="action-btn" onclick="loadBrazilAlerts()">🔎 CONSULTAR ALERTAS</button>
+                </div>
+            </div>
+            <div class="console-output" id="output-alerts" style="display: none;">Clique para consultar as tendências nacionais de incidentes.</div>
+            
+            <!-- Área de Interpretação por IA -->
+            <div id="ai-interpretation-container" style="display: none; margin-top: 5px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <i class="bi bi-robot" style="font-size: 20px; color: #00d4ff;"></i>
+                    <h4 style="margin: 0; color: #fff; font-size: 14px; font-weight: 600;">Análise Inteligente</h4>
+                </div>
+                <div id="ai-interpretation-content" class="glass-card" style="background: rgba(0, 212, 255, 0.05); border-color: rgba(0, 212, 255, 0.2); padding: 15px; line-height: 1.6; font-size: 14px; margin-bottom: 15px;">
+                    <div class="placeholder-glow">
+                        <span class="placeholder col-12"></span>
+                        <span class="placeholder col-10"></span>
+                        <span class="placeholder col-8"></span>
+                    </div>
+                </div>
+
+                <!-- Links Oficiais -->
+                <div id="official-links-container" style="display: none;">
+                    <h5 style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px;">Fontes Oficiais Analisadas</h5>
+                    <div id="official-links-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function loadBrazilAlerts() {
+            const output = document.getElementById('output-alerts');
+            const badge = document.getElementById('status-badge-alerts');
+            const aiContainer = document.getElementById('ai-interpretation-container');
+            const aiContent = document.getElementById('ai-interpretation-content');
+            const linksContainer = document.getElementById('official-links-container');
+            const linksList = document.getElementById('official-links-list');
+            
+            badge.className = 'status-badge status-running';
+            badge.innerText = 'CONSULTANDO...';
+            
+            // Prepara área da IA com loading
+            aiContainer.style.display = 'block';
+            linksContainer.style.display = 'none';
+            linksList.innerHTML = '';
+            aiContent.innerHTML = `
+                <div class="placeholder-glow">
+                    <p>[INFO] Coletando dados do CERT.br e solicitando análise da IA...</p>
+                    <span class="placeholder col-12" style="background: rgba(255,255,255,0.1);"></span>
+                    <span class="placeholder col-10" style="background: rgba(255,255,255,0.1);"></span>
+                    <span class="placeholder col-8" style="background: rgba(255,255,255,0.1);"></span>
+                </div>`;
+
+            try {
+                const resp = await fetch('/api/threats/brasil', { method: 'GET' });
+                const data = await resp.json();
+                
+                if (!resp.ok || !data.ok) throw new Error(data.error || 'Erro no servidor');
+                
+                // Exibe interpretação da IA (que agora é o foco principal)
+                if (data.ai_analysis) {
+                    aiContent.innerHTML = typeof marked !== 'undefined' ? marked.parse(data.ai_analysis) : data.ai_analysis;
+                } else {
+                    aiContent.innerHTML = "<p style='color: var(--text-secondary);'>A IA não conseguiu gerar um resumo no momento. Tente novamente em instantes.</p>";
+                }
+
+                // Exibe links das fontes de forma elegante
+                if (data.items && data.items.length > 0) {
+                    linksContainer.style.display = 'block';
+                    data.items.forEach(it => {
+                        const link = document.createElement('a');
+                        link.href = it.url;
+                        link.target = '_blank';
+                        link.className = 'status-badge';
+                        link.style.textDecoration = 'none';
+                        link.style.fontSize = '10px';
+                        link.style.background = 'rgba(255,255,255,0.05)';
+                        link.style.border = '1px solid var(--glass-border)';
+                        link.style.color = 'var(--text-secondary)';
+                        link.innerHTML = `<i class="bi bi-link-45deg"></i> ${it.title.split(']')[0].replace('[','')}`;
+                        linksList.appendChild(link);
+                    });
+                }
+
+                badge.className = 'status-badge status-success';
+                badge.innerText = 'ATUALIZADO';
+            } catch(e) {
+                aiContent.innerHTML = `<p style="color: #ff4d4d;">[ERROR] ${e.message}</p>`;
+                badge.className = 'status-badge status-error';
+                badge.innerText = 'FALHA';
+            }
+        }
+    </script>
+</div>
+{% endif %}
+
+{% if module == 'audit' %}
+<div id="module-audit" class="module-section">
+    <div class="glass-card">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid var(--glass-border);">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255, 193, 7, 0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 193, 7, 0.2);">
+                <i class="bi bi-shield-lock-fill" style="color: #ffc107; font-size: 20px;"></i>
+            </div>
+            <div>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Windows Auditor</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-secondary);">Auditoria de segurança local e credenciais</p>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Auditoria de Sistema -->
+            <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4 style="margin: 0; color: #fff; font-size: 14px; font-weight: 600;">🛡️ Auditoria Completa</h4>
+                <span id="status-badge-audit" class="status-badge status-idle">Pronto</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">Verifica processos, serviços e configurações críticas do Windows.</p>
+            <button class="action-btn" style="width: 100%;" onclick="runAudit()">🔍 INICIAR AUDITORIA</button>
+            </div>
+
+            <!-- Auditoria de Vault -->
+            <div style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 16px; border: 1px solid var(--glass-border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4 style="margin: 0; color: #fff; font-size: 14px; font-weight: 600;">🔑 Windows Vault</h4>
+                    <span id="status-badge-vault" class="status-badge status-idle">Pronto</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">Identifica credenciais armazenadas que podem representar risco.</p>
+                <button class="action-btn" style="width: 100%;" onclick="runVaultScan()">ESCANEAR VAULT</button>
+            </div>
+        </div>
+
+        <div class="console-output" id="output-audit" style="margin-top: 20px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; min-height: 60px; font-family: 'Fira Code', monospace; font-size: 12px;">
+            Aguardando comando...
         </div>
     </div>
 </div>
@@ -216,13 +364,48 @@
         }
     }
 
+    async function analyzeUrl() {
+        const output = document.getElementById('output-url');
+        const badge = document.getElementById('status-badge-url');
+        const csrf = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
+        const url = document.getElementById('url-input').value.trim();
+        if (!url) {
+            output.innerText = '[WARN] Informe uma URL válida.';
+            return;
+        }
+        output.innerText = `[INFO] Enviando URL: ${url}\n`;
+        badge.className = 'status-badge status-running';
+        badge.innerText = 'ANALISANDO...';
+        try {
+            const resp = await fetch('/api/analyze/url', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf
+                },
+                body: JSON.stringify({ url })
+            });
+            const ct = resp.headers.get('content-type') || '';
+            const data = ct.includes('application/json') ? await resp.json() : JSON.parse(await resp.text());
+            if (!resp.ok) throw new Error(data.error || 'Erro no servidor');
+            output.innerText += `[SUCCESS] ID: ${data.result_id}\nRedirecionando para resultados...`;
+            badge.className = 'status-badge status-success';
+            badge.innerText = 'CONCLUÍDO';
+            setTimeout(() => { window.location.href = `/results/${data.result_id}`; }, 900);
+        } catch(e) {
+            output.innerText += `[ERROR] ${e.message}`;
+            badge.className = 'status-badge status-error';
+            badge.innerText = 'FALHA';
+        }
+    }
+
     async function runAudit() {
         const output = document.getElementById('output-audit');
         const badge = document.getElementById('status-badge-audit');
         
-        output.innerText = "[INFO] Iniciando auditoria de sistema...\n";
+        output.innerText = "[INFO] Iniciando auditoria do Windows...\n";
         badge.className = 'status-badge status-running';
-        badge.innerText = 'AUDITANDO...';
+        badge.innerText = 'EXECUTANDO...';
 
         try {
             const response = await fetch('/api/scan/audit', {
@@ -234,90 +417,78 @@
                 body: JSON.stringify({})
             });
             
-            const data = await response.json();
-            if (data && data.raw_data) {
-                const rd = data.raw_data;
-                const status = rd.status || 'OK';
-                const badgeColor = status === 'CRITICAL' ? 'bg-danger' : (status === 'ALERT' ? 'bg-warning' : 'bg-success');
-                const lines = [
-                    `<div style="margin-bottom: 10px;"><span class="badge ${badgeColor}">${status}</span></div>`,
-                    `<div style="display: grid; grid-template-columns: 220px 1fr; gap: 10px;">`,
-                    rd.machine_name ? `<div style="color: var(--text-secondary); font-weight: 600;">Nome da Máquina</div><div>${rd.machine_name}</div>` : '',
-                    rd.ip ? `<div style="color: var(--text-secondary); font-weight: 600;">IP Local</div><div>${rd.ip}</div>` : '',
-                    rd.os ? `<div style="color: var(--text-secondary); font-weight: 600;">Sistema Operacional</div><div>${rd.os}</div>` : '',
-                    rd.admin_privileges ? `<div style="color: var(--text-secondary); font-weight: 600;">Privilégios Administrativos</div><div>${rd.admin_privileges}</div>` : '',
-                    rd.firewall ? `<div style="color: var(--text-secondary); font-weight: 600;">Firewall</div><div>${rd.firewall}</div>` : '',
-                    rd.uac ? `<div style="color: var(--text-secondary); font-weight: 600;">UAC</div><div>${rd.uac}</div>` : '',
-                    `</div>`,
-                ];
-                if (Array.isArray(rd.programs_recent) && rd.programs_recent.length > 0) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Programas Instalados Recentemente</h4>`);
-                    lines.push(`<div style="overflow-x:auto;"><table class="table"><thead><tr><th>Nome</th><th>Publisher</th><th>Data</th><th>Local</th></tr></thead><tbody>`);
-                    rd.programs_recent.slice(0,10).forEach(p => {
-                        lines.push(`<tr><td>${p.Name||'-'}</td><td>${p.Publisher||'-'}</td><td>${p.InstallDate||p.LastWriteTime||'-'}</td><td>${p.InstallLocation||'-'}</td></tr>`);
-                    });
-                    lines.push(`</tbody></table></div></div>`);
-                }
-                if (Array.isArray(rd.startup_entries) && rd.startup_entries.length > 0) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Entradas de Inicialização</h4><ul style="list-style:none; padding-left:0;">`);
-                    rd.startup_entries.slice(0,15).forEach(e => {
-                        lines.push(`<li><strong>${e.Name||'-'}</strong>: <span style="color:var(--text-secondary)">${e.Value||'-'}</span></li>`);
-                    });
-                    lines.push(`</ul></div>`);
-                }
-                if (Array.isArray(rd.scheduled_tasks_hidden) && rd.scheduled_tasks_hidden.length > 0) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Tarefas Agendadas Ocultas</h4><ul style="list-style:none; padding-left:0;">`);
-                    rd.scheduled_tasks_hidden.slice(0,15).forEach(t => {
-                        lines.push(`<li><strong>${t.TaskName||'-'}</strong> (${t.Path||'-'})</li>`);
-                    });
-                    lines.push(`</ul></div>`);
-                }
-                if (Array.isArray(rd.suspicious_apps) && rd.suspicious_apps.length > 0) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Apps Suspeitos</h4><ul style="list-style:none; padding-left:0;">`);
-                    rd.suspicious_apps.slice(0,10).forEach(s => {
-                        lines.push(`<li><span style="color:var(--text-primary)">${s.path}</span> <span class="badge bg-warning">suspeito</span></li>`);
-                    });
-                    lines.push(`</ul></div>`);
-                }
-                if (Array.isArray(data.related_analyses) && data.related_analyses.length > 0) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Análises Enviadas ao Malware Analyzer</h4><ul style="list-style:none; padding-left:0;">`);
-                    data.related_analyses.forEach(a => {
-                        lines.push(`<li><a href="/results/${a.result_id}" class="action-btn" style="text-decoration:none;">Abrir Relatório (${a.path})</a></li>`);
-                    });
-                    lines.push(`</ul></div>`);
-                }
-                if (data.ai_analysis) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Análise por IA</h4><div style="color: var(--text-primary);">${data.ai_analysis}</div></div>`);
-                }
-                if (data.ai_reputation) {
-                    lines.push(`<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Reputação por Nome de Processo (IA)</h4><div style="color: var(--text-primary);">${data.ai_reputation}</div></div>`);
-                }
-                output.innerHTML = lines.join('');
-            } else {
-                output.innerText += JSON.stringify(data, null, 2);
-            }
-            try {
-                const vaultResp = await fetch('/api/analyze/vault', {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken }
-                });
-                const ct = vaultResp.headers.get('content-type') || '';
-                if (vaultResp.ok) {
-                    const vaultData = ct.includes('application/json') ? await vaultResp.json() : JSON.parse(await vaultResp.text());
-                    output.innerHTML += `<div style="margin-top: 15px;"><h4 style="color:#fff; margin:0 0 8px 0;">Windows Vault</h4><div>Relatório salvo automaticamente. <a href="/results/${vaultData.result_id}" class="action-btn" style="text-decoration:none;">Abrir Relatório</a></div></div>`;
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok) {
+                if (contentType.includes('application/json')) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Erro no servidor');
                 } else {
-                    output.innerHTML += `<div style="margin-top: 15px; color: var(--text-secondary);">Falha ao salvar Windows Vault automaticamente.</div>`;
+                    const text = await response.text();
+                    throw new Error(`Resposta não-JSON (${response.status}): ${text.substring(0, 100)}...`);
                 }
-            } catch (e) {
-                output.innerHTML += `<div style="margin-top: 15px; color: var(--text-secondary);">Erro ao salvar Windows Vault automaticamente: ${e.message}</div>`;
             }
+            
+            const data = contentType.includes('application/json') ? await response.json() : JSON.parse(await response.text());
+            
+            output.innerText += `[SUCCESS] Auditoria concluída. ID: ${data.analysis_id}\nRedirecionando...`;
             badge.className = 'status-badge status-success';
-            badge.innerText = 'FINALIZADO';
+            badge.innerText = 'CONCLUÍDO';
+            
+            setTimeout(() => {
+                window.location.href = `/results/${data.analysis_id}`;
+            }, 1000);
         } catch (e) {
             output.innerText += `[ERROR] ${e.message}`;
             badge.className = 'status-badge status-error';
             badge.innerText = 'FALHA';
         }
     }
+
+    async function runVaultScan() {
+        const output = document.getElementById('output-audit');
+        const badge = document.getElementById('status-badge-vault');
+        
+        output.innerText = "[INFO] Iniciando escaneamento do Windows Vault...\n";
+        badge.className = 'status-badge status-running';
+        badge.innerText = 'ESCANEANDO...';
+
+        try {
+            const response = await fetch('/api/analyze/vault', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({})
+            });
+            
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok) {
+                if (contentType.includes('application/json')) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Erro no servidor');
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Resposta não-JSON (${response.status}): ${text.substring(0, 100)}...`);
+                }
+            }
+            
+            const data = contentType.includes('application/json') ? await response.json() : JSON.parse(await response.text());
+            
+            output.innerText += `[SUCCESS] Vault scan concluído. ID: ${data.result_id}\nRedirecionando...`;
+            badge.className = 'status-badge status-success';
+            badge.innerText = 'CONCLUÍDO';
+            
+            setTimeout(() => {
+                window.location.href = `/results/${data.result_id}`;
+            }, 1000);
+        } catch (e) {
+            output.innerText += `[ERROR] ${e.message}`;
+            badge.className = 'status-badge status-error';
+            badge.innerText = 'FALHA';
+        }
+    }
+
+    
 </script>
 {% endblock %}

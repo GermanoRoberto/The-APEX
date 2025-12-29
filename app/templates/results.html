@@ -60,7 +60,7 @@
                     <thead>
                         <tr>
                             <th>IP</th>
-                            <th>Hostname</th>
+                            <th>Identificação do Dispositivo</th>
                             <th>MAC</th>
                             <th>Portas Abertas</th>
                             <th>Serviços</th>
@@ -70,7 +70,12 @@
                         {% for dev in analysis.external.network_devices %}
                         <tr>
                             <td>{{ dev.ip }}</td>
-                            <td>{{ dev.hostname or '-' }}</td>
+                            <td>
+                                <strong>{{ dev.name or dev.hostname or 'Dispositivo Desconhecido' }}</strong>
+                                {% if dev.hostname and dev.hostname != dev.name %}
+                                    <br><small style="color: var(--text-secondary);">Hostname: {{ dev.hostname }}</small>
+                                {% endif %}
+                            </td>
                             <td>{{ dev.mac or '-' }}</td>
                             <td>
                                 {% if dev.open_ports and dev.open_ports|length > 0 %}

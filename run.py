@@ -20,12 +20,12 @@ async def main():
     # para acionar a abertura automática do navegador.
     app.debug = config.use_reloader
 
-    print("\n🛡️  THE APEX ARCHITECT // MALWARE ANALYZER 🛡️")
-    print(f"👉 Access: http://{config.bind[0]}")
+    print("\nTHE APEX ARCHITECT // MALWARE ANALYZER")
+    print(f"Access: http://{config.bind[0]}")
     
     if config.use_reloader:
-        print(f"ℹ️  Reloader Active. Ignoring: {config.reload_exclude_patterns}")
-    print("👉 CTRL+C to shutdown\n")
+        print(f"Reloader Active. Ignoring: {config.reload_exclude_patterns}")
+    print("CTRL+C to shutdown\n")
 
     # Inicia o servidor com a configuração carregada.
     await serve(app, config)

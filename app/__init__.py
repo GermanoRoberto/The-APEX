@@ -41,6 +41,31 @@ def create_app():
     # --- Inicialização do Banco de Dados ---
     database.init_app(app)
     
+    # --- Filtros Customizados do Jinja2 ---
+    @app.template_filter('from_json')
+    def from_json_filter(s):
+        """Converte uma string JSON em um objeto Python."""
+        import json
+        try:
+            return json.loads(s)
+        except Exception:
+            return {}
+
+    @app.template_filter('strftime')
+    def strftime_filter(timestamp, format='%d/%m/%Y %H:%M'):
+        """Formata um timestamp Unix para uma string de data legível."""
+        from datetime import datetime
+        try:
+            return datetime.fromtimestamp(int(float(timestamp))).strftime(format)
+        except Exception:
+            return "-"
+
+    @app.template_filter('basename')
+    def basename_filter(path):
+        """Retorna o nome base de um caminho de arquivo."""
+        import os
+        return os.path.basename(path)
+    
     # Inicializa tabelas (pode ser movido para um comando CLI em produção para evitar overhead)
     # Mas como é SQLite local e leve, fazemos aqui para garantir funcionamento imediato.
     try:

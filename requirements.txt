@@ -73,3 +73,5 @@ uritemplate==4.2.0
 pyparsing==3.2.5
 Markdown
 reportlab
+elasticsearch>=8.0.0
+cryptography==44.0.0

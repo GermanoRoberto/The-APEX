@@ -62,6 +62,12 @@ class Config:
         self.OSM_API_KEY = os.environ.get('OSM_API_KEY')
         self.GOOGLE_SAFE_BROWSING_API_KEY = os.environ.get('GOOGLE_SAFE_BROWSING_API_KEY')
 
+        # SIEM/SOAR Integrations
+        self.ELASTIC_API_KEY = os.environ.get('ELASTIC_API_KEY')
+        self.ELASTIC_API_URL = os.environ.get('ELASTIC_API_URL')
+        self.WAZUH_API_KEY = os.environ.get('WAZUH_API_KEY')
+        self.WAZUH_API_URL = os.environ.get('WAZUH_API_URL')
+
         # Modelos de IA
         self.GEMINI_MODEL = os.environ.get('GEMINI_MODEL', "gemini-1.5-flash")
         self.GROQ_MODEL = os.environ.get('GROQ_MODEL', "llama-3.3-70b-versatile")

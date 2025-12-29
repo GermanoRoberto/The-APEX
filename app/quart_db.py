@@ -8,6 +8,7 @@ import json
 import time
 import os
 import logging
+import hashlib
 from contextlib import contextmanager
 from quart import g, current_app
 
@@ -163,3 +164,5 @@ def clear_all_analyses() -> int:
         cur = db.execute('DELETE FROM analyses')
         db.commit()
         return cur.rowcount
+
+

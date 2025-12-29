@@ -88,18 +88,77 @@
     </details>
 
     <details>
-        <summary>Onde posso obter as chaves de API necessárias?</summary>
+        <summary>Guia Passo-a-Passo: Como obter cada API Key</summary>
         <div class="faq-content">
-            Para o funcionamento completo da ferramenta, você precisa configurar chaves de API para os serviços externos. Recomendamos utilizar Groq para IA pela performance e custo, mas você pode usar Gemini, OpenAI ou Grok. Aqui estão os links oficiais:
+            <p>Siga estas instruções para obter as chaves necessárias gratuitamente:</p>
+            
+            <div style="margin-top: 15px;">
+                <strong>1. VirusTotal (Análise de Malware)</strong>
+                <ul>
+                    <li>Cadastre-se em <a href="https://www.virustotal.com/gui/join-us" target="_blank">VirusTotal Join Us</a>.</li>
+                    <li>Após logar, clique no seu perfil (canto superior direito) e vá em <strong>"API Key"</strong>.</li>
+                    <li>Copie a chave exibida em "Personal API Key".</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <strong>2. Groq (Inteligência Artificial - Recomendado)</strong>
+                <ul>
+                    <li>Acesse <a href="https://console.groq.com/keys" target="_blank">Groq Console</a>.</li>
+                    <li>Faça login (pode usar conta Google).</li>
+                    <li>Clique em <strong>"Create API Key"</strong>, dê um nome e copie a chave gerada.</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <strong>3. Google Gemini (IA Alternativa)</strong>
+                <ul>
+                    <li>Acesse <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</li>
+                    <li>Clique em <strong>"Create API key"</strong>.</li>
+                    <li>Escolha o projeto e copie sua chave.</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <strong>4. Google Safe Browsing (Verificação de URLs)</strong>
+                <ul>
+                    <li>Acesse o <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>.</li>
+                    <li>Crie um novo projeto ou selecione um existente.</li>
+                    <li>Vá em <strong>"APIs & Services" > "Library"</strong> e pesquise por "Safe Browsing API". Ative-a.</li>
+                    <li>Vá em <strong>"Credentials" > "Create Credentials" > "API Key"</strong>.</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <strong>5. Elastic Stack & Wazuh (SIEM Locais Gratuito)</strong>
+                <ul>
+                    <li><strong>Elastic:</strong> Rode <code>docker-compose up -d</code>. O Elasticsearch ficará em <code>http://localhost:9200</code> e o Kibana em <a href="http://localhost:5601" target="_blank">http://localhost:5601</a>.</li>
+                    <li><strong>Wazuh:</strong> Incluído no nosso <code>docker-compose.yml</code>! O indexador roda na porta <code>9201</code>, o Manager na <code>55000</code> e o Dashboard na <code>5602</code>.</li>
+                    <li><strong>Dica:</strong> Para o Wazuh funcionar no Windows (Docker Desktop), garanta que o WSL2 tenha memória suficiente (mínimo 4GB recomendados).</li>
+                </ul>
+            </div>
+        </div>
+    </details>
+
+    <details>
+        <summary>Onde configurar as chaves?</summary>
+        <div class="faq-content">
+            Após obter suas chaves, clique no ícone de engrenagem no menu lateral ou acesse a página de <a href="{{ url_for('main.setup') }}">Configurações</a>. Cole as chaves nos campos correspondentes e clique em "Salvar Alterações". A aplicação estará pronta para uso imediato.
+        </div>
+    </details>
+
+    <details>
+        <summary>Integração com SIEM/SOAR (Elastic & Wazuh Locais)</summary>
+        <div class="faq-content">
+            <p>O The APEX suporta integração com o <strong>Elastic Stack</strong> e <strong>Wazuh</strong>, que podem ser utilizados gratuitamente se instalados localmente (Self-Managed).</p>
             <ul>
-                <li><strong>VirusTotal:</strong> Acesse <a href="https://www.virustotal.com/gui/join-us" target="_blank">https://www.virustotal.com/gui/join-us</a> para criar uma conta gratuita e obter sua chave de API.</li>
-                <li><strong>Google Safe Browsing:</strong> Vá para <a href="https://console.developers.google.com/" target="_blank">https://console.developers.google.com/</a>, crie um projeto, habilite a API Safe Browsing e gere uma chave de API.</li>
-                <li><strong>Google Gemini:</strong> Obtenha uma chave gratuita em <a href="https://aistudio.google.com/app/apikey" target="_blank">https://aistudio.google.com/app/apikey</a>.</li>
-                <li><strong>Groq:</strong> Registre-se em <a href="https://console.groq.com/keys" target="_blank">https://console.groq.com/keys</a> para gerar sua chave de API.</li>
-                <li><strong>OpenAI (GPT-4):</strong> Acesse <a href="https://platform.openai.com/api-keys" target="_blank">https://platform.openai.com/api-keys</a> para criar uma chave (observe os custos associados).</li>
-                <li><strong>Grok (xAI):</strong> Disponível em <a href="https://console.x.ai/" target="_blank">https://console.x.ai/</a> para gerar chaves.</li>
+                <li><strong>Setup Automático:</strong> Incluímos um <code>docker-compose.yml</code> na raiz do projeto que configura o Elasticsearch, Kibana, Wazuh Indexer, Manager e Dashboard automaticamente.</li>
+                <li><strong>Requisito Wazuh:</strong> No Linux ou WSL2, você precisa rodar o comando <code>sudo sysctl -w vm.max_map_count=262144</code> antes de iniciar para que o indexador funcione corretamente.</li>
+                <li><strong>Configuração:</strong> Use <code>http://localhost:9200</code> para o Elastic e <code>http://localhost:55000</code> para o Wazuh nas Configurações.</li>
             </ul>
-            Após obter as chaves, configure-as na página de <a href="{{ url_for('main.setup') }}">Configurações</a> da aplicação.
+            <p style="margin-top: 15px; font-size: 13px; color: var(--text-secondary);">
+                <strong>Nota:</strong> Mantemos a remoção de <strong>Splunk</strong>, <strong>QRadar</strong> e <strong>Microsoft Sentinel</strong> por serem serviços predominantemente pagos ou corporativos.
+            </p>
         </div>
     </details>
 </div>

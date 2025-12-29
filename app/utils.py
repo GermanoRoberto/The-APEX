@@ -117,6 +117,10 @@ def get_key_status() -> dict:
         'VT_API_KEY': mask_key(vt_key),
         'OSM_API_KEY': mask_key(settings.OSM_API_KEY),
         'GOOGLE_SAFE_BROWSING_API_KEY': mask_key(settings.GOOGLE_SAFE_BROWSING_API_KEY),
+        'ELASTIC_API_KEY': mask_key(settings.ELASTIC_API_KEY),
+        'ELASTIC_API_URL': settings.ELASTIC_API_URL or "Não definida",
+        'WAZUH_API_KEY': mask_key(settings.WAZUH_API_KEY),
+        'WAZUH_API_URL': settings.WAZUH_API_URL or "Não definida",
         'all_set': bool(vt_key and ai_key)
     }
 

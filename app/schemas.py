@@ -30,4 +30,10 @@ class SetupRequest(BaseModel):
     GEMINI_MODEL: Optional[str] = None
     GROQ_MODEL: Optional[str] = None
     
+    # SIEM/SOAR Integrations
+    ELASTIC_API_KEY: Optional[str] = None
+    ELASTIC_API_URL: Optional[str] = None
+    WAZUH_API_KEY: Optional[str] = None
+    WAZUH_API_URL: Optional[str] = None
+    
     # Validação customizada pode ser adicionada aqui, ex: checar formato de chaves

@@ -13,7 +13,7 @@ def prepare_environment():
     quart_db.init_db()
 
 def build_config() -> Config:
-    host = os.environ.get("APP_HOST", "0.0.0.0")
+    host = os.environ.get("APP_HOST", "127.0.0.1")
     port = os.environ.get("APP_PORT", "5000")
     reload_flag = os.environ.get("APP_RELOAD", "false").lower() in ("true", "1", "t", "yes")
     workers = int(os.environ.get("APP_WORKERS", "2"))
@@ -27,6 +27,10 @@ async def main():
     prepare_environment()
     app = create_app()
     cfg = build_config()
+    bind = cfg.bind[0] if cfg.bind else "127.0.0.1:5000"
+    host, port = bind.split(":")
+    display_host = "127.0.0.1" if host in ("0.0.0.0", "0:0:0:0") else host
+    print(f"Access: http://{display_host}:{port}/")
     await serve(app, cfg)
 
 if __name__ == "__main__":

@@ -99,10 +99,15 @@ async def analyze_file():
         return jsonify({'result_id': result_id})
 
     except ValidationError as e:
-         return jsonify({'error': e.errors()}), 400
+        return jsonify({'error': e.errors()}), 400
     except Exception as e:
         logger.error(f"Erro na análise de arquivo: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+@utils.log_execution
+@api_bp.route('/correlation/alerts', methods=['POST'])
+async def correlation_alerts():
+    return jsonify({'error': 'Módulo desabilitado'}), 403
 
 @utils.log_execution
 @api_bp.route('/analyze/url', methods=['POST'])
@@ -125,6 +130,21 @@ async def analyze_url():
         logger.error(f"Erro na análise de URL: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/threats/brasil', methods=['GET'])
+async def threats_brasil():
+    try:
+        trends = services.get_br_threat_trends(limit=5)
+        # Adiciona interpretação por IA
+        ai_analysis = services.get_ai_interpretation_for_threats(trends)
+        return jsonify({
+            'ok': True, 
+            'items': trends,
+            'ai_analysis': ai_analysis
+        })
+    except Exception as e:
+        logger.error(f"Erro ao obter Alertas Brasil: {e}", exc_info=True)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
 @api_bp.route('/scan/<module_type>', methods=['POST'])
 async def run_scan(module_type):
     """
@@ -137,9 +157,8 @@ async def run_scan(module_type):
         # Recupera o provider se enviado no JSON (opcional)
         data = await request.get_json() or {}
         
-        # Validação com Pydantic
-        request_model = ScanRequest(**data)
-        result = await services.run_system_scan(module_type, 'groq')
+        ai_provider = data.get('ai_provider', 'groq')
+        result = await services.run_system_scan(module_type, ai_provider)
         return jsonify(result)
         
     except ValidationError as e:
@@ -159,6 +178,23 @@ async def network_local():
     except Exception as e:
         logger.error(f"Erro ao detectar rede local: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/analyze/vault', methods=['POST'])
+async def analyze_vault():
+    """Endpoint para análise do Windows Vault."""
+    if not await check_csrf():
+        return jsonify({'error': 'Token de segurança inválido (CSRF).'}), 403
+    try:
+        # Recupera o provider se enviado no JSON (opcional)
+        data = await request.get_json() or {}
+        ai_provider = data.get('ai_provider', 'groq')
+        
+        result_id = await services.run_vault_analysis(ai_provider)
+        return jsonify({'result_id': result_id})
+    except Exception as e:
+        logger.error(f"Erro na análise do Vault: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 @utils.log_execution
 @api_bp.route('/analyze/network', methods=['POST'])
 async def analyze_network():
@@ -175,14 +211,4 @@ async def analyze_network():
         logger.error(f"Erro na análise de rede: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-@utils.log_execution
-@api_bp.route('/analyze/vault', methods=['POST'])
-async def analyze_vault():
-    try:
-        if not await check_csrf():
-            return jsonify({'error': 'Token de segurança inválido (CSRF).'}), 403
-        result_id = await services.run_vault_analysis('groq')
-        return jsonify({'result_id': result_id})
-    except Exception as e:
-        logger.error(f"Erro na análise do Windows Vault: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+
