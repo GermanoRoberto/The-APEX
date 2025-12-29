@@ -2,6 +2,8 @@
 
 **Aplicação web assíncrona para análise de malware e monitoramento de rede, com integração MITRE ATT&CK® e explicações por IA. Preparada para Docker e implantação simples.**
 
+<img width="1896" height="887" alt="Captura de tela 2025-12-28 220250" src="https://github.com/user-attachments/assets/817ca693-0cf2-4a6f-b29b-c98d173c888c" />
+
 ## Índice
 - Descrição
 - Módulos
