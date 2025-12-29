@@ -12,14 +12,11 @@ services:
       - APP_HOST=0.0.0.0
       - SECRET_KEY=apex_secret_key_docker_default_change_me
       - ELASTIC_API_URL=http://elasticsearch:9200
-      - WAZUH_API_URL=https://wazuh-manager:55000
     volumes:
       - apex_data:/app/instance
     depends_on:
       elasticsearch:
         condition: service_healthy
-      wazuh-manager:
-        condition: service_started
     networks:
       - apex-network
 
@@ -64,61 +61,6 @@ services:
     networks:
       - apex-network
 
-  # --- Wazuh Stack ---
-  wazuh-indexer:
-    image: wazuh/wazuh-indexer:4.7.2
-    container_name: apex-wazuh-indexer
-    restart: always
-    environment:
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-      - "discovery.type=single-node"
-      - "plugins.security.disabled=true"
-    ports:
-      - "9201:9200"
-    volumes:
-      - wazuh_indexer_data:/var/lib/wazuh-indexer
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    networks:
-      - apex-network
-
-  wazuh-manager:
-    image: wazuh/wazuh-manager:4.7.2
-    container_name: apex-wazuh-manager
-    restart: always
-    ports:
-      - "1514:1514"
-      - "1515:1515"
-      - "514:514/udp"
-      - "55000:55000"
-    environment:
-      - INDEXER_URL=http://wazuh-indexer:9200
-    networks:
-      - apex-network
-    volumes:
-      - wazuh_etc:/var/ossec/etc
-      - wazuh_logs:/var/ossec/logs
-    depends_on:
-      wazuh-indexer:
-        condition: service_healthy
-
-  wazuh-dashboard:
-    image: wazuh/wazuh-dashboard:4.7.2
-    container_name: apex-wazuh-dashboard
-    restart: always
-    ports:
-      - "5602:5601"
-    environment:
-      - WAZUH_MANAGER_URL=https://wazuh-manager:55000
-      - INDEXER_URL=http://wazuh-indexer:9200
-    networks:
-      - apex-network
-    depends_on:
-      - wazuh-manager
-
 networks:
   apex-network:
     driver: bridge
@@ -127,10 +69,4 @@ volumes:
   apex_data:
     driver: local
   esdata:
-    driver: local
-  wazuh_indexer_data:
-    driver: local
-  wazuh_etc:
-    driver: local
-  wazuh_logs:
     driver: local

@@ -9,11 +9,11 @@ echo           THE APEX - CYBERSECURITY PLATFORM
 echo ======================================================
 echo [1] Executar Local (Apenas App - Requer Python)
 echo [2] Executar via Docker (Sistema Completo + SOC Stack)
-echo [3] Executar via Docker (Apenas SOC Stack: Elastic/Wazuh)
+echo [3] Executar via Docker (Apenas SOC Stack: Elastic Stack)
 echo [4] Rebuild Containers (Build do Zero)
 echo [5] Parar Tudo e Limpar Containers
 echo [6] Ver Logs do Sistema
-echo [7] Abrir Dashboards (App, Kibana, Wazuh)
+echo [7] Abrir Dashboards (App, Kibana)
 echo [8] Modo Diagnostico (Passo a Passo)
 echo [Q] Sair
 echo ======================================================
@@ -31,6 +31,10 @@ if /I "%choice%"=="Q" goto end
 goto menu
 
 :local
+echo [+] Configurando variaveis de ambiente locais...
+:: Altere aqui se o seu Elasticsearch estiver em outro endereço/porta
+if not defined ELASTIC_API_URL set ELASTIC_API_URL=http://localhost:9200
+
 echo [+] Iniciando ambiente local...
 where python >nul 2>&1 || (echo [!] Python nao encontrado no PATH & pause & goto menu)
 echo [+] Instalando/Atualizando dependencias...
@@ -73,14 +77,13 @@ timeout /t 5
 start "" http://localhost:5000
 echo [+] App: http://localhost:5000
 echo [+] Kibana: http://localhost:5601
-echo [+] Wazuh: http://localhost:5602
 pause
 goto menu
 
 :dockerstack
 call :check_docker
-echo [+] Iniciando apenas SOC Stack (Elastic/Wazuh)...
-%DOCKER_CMD% up -d elasticsearch kibana wazuh-indexer wazuh-manager wazuh-dashboard
+echo [+] Iniciando apenas SOC Stack (Elastic Stack)...
+%DOCKER_CMD% up -d elasticsearch kibana
 if %ERRORLEVEL% neq 0 (
     echo [!] Erro ao subir SOC Stack.
     pause
@@ -167,7 +170,6 @@ goto menu
 echo [+] Abrindo dashboards no navegador...
 start "" http://localhost:5000
 start "" http://localhost:5601
-start "" http://localhost:5602
 goto menu
 
 :end

@@ -65,8 +65,6 @@ class Config:
         # SIEM/SOAR Integrations
         self.ELASTIC_API_KEY = os.environ.get('ELASTIC_API_KEY')
         self.ELASTIC_API_URL = os.environ.get('ELASTIC_API_URL')
-        self.WAZUH_API_KEY = os.environ.get('WAZUH_API_KEY')
-        self.WAZUH_API_URL = os.environ.get('WAZUH_API_URL')
 
         # Modelos de IA
         self.GEMINI_MODEL = os.environ.get('GEMINI_MODEL', "gemini-1.5-flash")
