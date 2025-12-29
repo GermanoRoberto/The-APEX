@@ -150,6 +150,7 @@ def analyze_bytes(content: bytes, filename: str) -> Dict[str, Any]:
     
     result = {
         'filename': filename, 
+        'item_type': 'file',
         'sha256': sha256, 
         'size_bytes': len(content), 
         'verdict': verdict, 
@@ -165,13 +166,13 @@ def analyze_bytes(content: bytes, filename: str) -> Dict[str, Any]:
 
 def build_url_analysis_result(url: str, external_results: Dict[str, Any]) -> Dict[str, Any]:
     """Constrói o dicionário de resultado final para uma análise de URL."""
-    results = {
+    return {
         "url": url,
+        "item_type": "url",
         "scanned_at": int(time.time()),
-        "results": {k: v for k, v in external_results.items() if v and not v.get("error")},
+        "external": {k: v for k, v in external_results.items() if v and not v.get("error")},
         "final_verdict": calculate_final_verdict('unknown', external_results)
     }
-    return results
 
 def calculate_final_verdict(local_verdict: str, external_results: Dict[str, Any]) -> str:
 

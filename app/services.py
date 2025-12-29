@@ -14,6 +14,7 @@ import re
 import platform
 import socket
 import ipaddress
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone
 from diskcache import Cache
 from typing import Dict, Any, List, Tuple, Optional
@@ -92,60 +93,308 @@ def _fmt_ts(v: Any) -> str:
         return "-"
 
 def _prune_data_for_prompt(data: Any) -> Any:
-    """Remove campos excessivamente grandes ou irrelevantes para economizar tokens na IA."""
+    """
+    Reduz a complexidade dos dados (Big O) antes da serialização JSON.
+    Remove campos verbosos e trunca listas para economizar tokens e processamento.
+    """
     if isinstance(data, dict):
-        new_dict = {}
-        for k, v in data.items():
-            if k in ['content', 'raw_response', 'full_log', 'startup_entries', 'programs_recent', 'scheduled_tasks_hidden']:
-                if isinstance(v, list):
-                    new_dict[k] = f"[{len(v)} itens ocultados para brevidade]"
-                else:
-                    new_dict[k] = "[Ocultado]"
-            else:
-                new_dict[k] = _prune_data_for_prompt(v)
-        return new_dict
+        # Remove campos binários ou muito grandes que não ajudam no resumo executivo
+        return {k: _prune_data_for_prompt(v) for k, v in data.items() 
+                if k not in ['strings', 'hex_dump', 'raw_response', 'response_body', 'content', 'full_log', 'startup_entries', 'programs_recent', 'scheduled_tasks_hidden']}
     elif isinstance(data, list):
-        if len(data) > 5:
-            return [_prune_data_for_prompt(i) for i in data[:5]] + [f"... ({len(data)-5} mais itens)"]
-        return [_prune_data_for_prompt(i) for i in data]
+        # Limita listas a 20 itens
+        return [_prune_data_for_prompt(i) for i in data[:20]]
+    elif isinstance(data, str):
+        # Trunca strings individuais muito longas
+        return data[:500] + "..." if len(data) > 500 else data
     return data
 
-async def get_ai_explanation(analysis_result: Dict[str, Any], provider_name: str = None) -> Dict[str, str]:
-    """Obtém uma explicação e recomendação da IA para um resultado de análise."""
-    provider_name = provider_name or 'groq'
+def _build_ai_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
+    """Constrói o prompt de análise executiva com base no tipo de item."""
+    item_type = result.get('item_type') or ("arquivo" if "sha256" in result else ("rede" if result.get("devices") else "URL"))
+    
+    type_map = {
+        "file": "arquivo (Malware Analysis)",
+        "url": "URL/Site",
+        "network": "rede (Network Scan)",
+        "audit": "auditoria de sistema Windows",
+        "vault": "auditoria de credenciais (Windows Vault)",
+        "soc": "correlação de alertas (SOC)"
+    }
+    friendly_type = type_map.get(item_type, item_type)
+    
+    identifier = result.get('filename') or result.get('url') or result.get('network_cidr') or result.get('item_identifier')
+    verdict = result.get('final_verdict', 'desconhecido')
+    
+    pruned_result = _prune_data_for_prompt(result)
+
+    prompt = (
+        f"Você é um analista de segurança cibernética sênior. Sua tarefa é fornecer um resumo executivo "
+        f"claro e conciso sobre a análise de {friendly_type}.\n\n"
+        f"**Item Analisado:** `{identifier}`\n"
+        f"**Veredito Final:** **{verdict.upper()}**\n\n"
+        f"**Contexto:**\n"
+        f"O item foi analisado por múltiplas ferramentas de segurança. Abaixo estão os dados brutos.\n\n"
+        f"**Instruções Específicas:**\n"
+        f"1. Identifique o CONTEÚDO do item (ex: se é um processo suspeito, credencial exposta, site de phishing, etc).\n"
+        f"2. Explique em LINGUAGEM SIMPLES E DIRETA (para um público não técnico) o que foi encontrado.\n"
+        f"3. Se o veredito for 'malicioso' ou 'suspeito', explique os principais riscos.\n"
+        f"4. Se for 'limpo', confirme que nenhuma ameaça foi detectada pelas ferramentas.\n"
+        f"5. Se houver dados do MITRE ATT&CK, inclua uma seção 'Análise MITRE ATT&CK' explicando as táticas e técnicas identificadas.\n\n"
+        f"Seja objetivo e evite jargões.\n\n"
+        f"**Dados da Análise:**\n"
+        f"```json\n{json.dumps(pruned_result, indent=2, ensure_ascii=False)}\n```\n\n"
+        f"**Seu Resumo Executivo (em português, formato Markdown):**\n"
+    )
+
+    ai_provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
+    if ai_provider_name == 'gemini':
+        model_name = settings.GEMINI_MODEL
+    elif ai_provider_name == 'grok':
+        model_name = getattr(settings, 'GROK_MODEL', 'grok-beta')
+    else:
+        model_name = settings.GROQ_MODEL
+
+    return _truncate_prompt_by_tokens(prompt, model_name)
+
+def _build_ai_remediation_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
+    """Constrói o prompt de remediação com base no tipo de item."""
+    item_type = result.get('item_type') or ("arquivo" if "sha256" in result else ("rede" if result.get("devices") else "URL"))
+    
+    type_map = {
+        "file": "arquivo (Malware Analysis)",
+        "url": "URL/Site",
+        "network": "rede (Network Scan)",
+        "audit": "auditoria de sistema Windows",
+        "vault": "auditoria de credenciais (Windows Vault)",
+        "soc": "alerta de correlação de segurança"
+    }
+    friendly_type = type_map.get(item_type, item_type)
+    
+    identifier = result.get('filename') or result.get('url') or result.get('network_cidr') or result.get('item_identifier')
+    verdict = result.get('final_verdict', 'desconhecido')
+    pruned_result = _prune_data_for_prompt(result)
+    
+    prompt = (
+        f"Você é um especialista em resposta a incidentes. Com base nos dados a seguir, produza orientações de remediação práticas para {friendly_type}.\n\n"
+        f"**Item:** `{identifier}`\n"
+        f"**Veredito:** **{verdict.upper()}**\n\n"
+        f"Escreva em português, formato Markdown, estruturando em Ações Imediatas, Contenção, Erradicação, Recuperação e Verificações Pós-Remediação. "
+        f"Se o veredito for 'limpo', indique apenas boas práticas de prevenção e monitoramento. Seja específico e acionável.\n\n"
+        f"**Dados da Análise:**\n"
+        f"```json\n{json.dumps(pruned_result, indent=2, ensure_ascii=False)}\n```\n\n"
+        f"**Orientações de Remediação:**\n"
+    )
+    
+    ai_provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
+    if ai_provider_name == 'gemini':
+        model_name = settings.GEMINI_MODEL
+    elif ai_provider_name == 'grok':
+        model_name = getattr(settings, 'GROK_MODEL', 'grok-beta')
+    else:
+        model_name = settings.GROQ_MODEL
+        
+    return _truncate_prompt_by_tokens(prompt, model_name)
+
+async def get_ai_explanation(analysis_result: Dict[str, Any], ai_provider: str = None) -> Dict[str, Any]:
+    """
+    Gera uma explicação em linguagem natural do resultado da análise de forma assíncrona.
+    Lida com cache e seleção de chaves por provedor.
+    """
+    provider_name = ai_provider or settings.AI_PROVIDER_DETECTED or 'groq'
+    if not provider_name:
+        raise AIProviderError("Nenhum provedor de IA configurado ou detectado.")
+
     try:
-        provider = get_ai_provider(provider_name)
-        pruned_data = _prune_data_for_prompt(analysis_result)
+        # 1. Obter prompts
+        summary_prompt = _build_ai_prompt(analysis_result, provider_name)
+        remediation_prompt = _build_ai_remediation_prompt(analysis_result, provider_name)
         
-        prompt = (
-            "Você é o The Apex AI, um especialista em cibersegurança. Analise o seguinte resultado de detecção "
-            "e forneça um resumo executivo em português e ações de remediação recomendadas.\n\n"
-            f"Dados: {json.dumps(pruned_data, ensure_ascii=False)}\n\n"
-            "Responda no formato:\nResumo: [Seu resumo]\nRemediação: [Suas ações]"
-        )
+        # 2. Verificar Cache
+        cache_key = hashlib.sha256(f"{provider_name}:{summary_prompt}:{remediation_prompt}".encode('utf-8')).hexdigest()
+        cached_response = ai_cache.get(cache_key)
+        if cached_response:
+            logger.info(f"Retornando resposta de IA do cache para {provider_name}")
+            return cached_response
+
+        # 3. Chamar Provedor (em thread separada pois os SDKs costumam ser síncronos)
+        key_for_provider = _get_ai_key_for_provider(provider_name)
+        provider_instance = get_ai_provider(provider_name)
         
-        safe_prompt = _truncate_prompt_by_tokens(prompt, settings.GROQ_MODEL)
-        response = await asyncio.to_thread(provider.generate_explanation, safe_prompt, settings.AI_API_KEY)
+        summary = await asyncio.to_thread(provider_instance.generate_explanation, summary_prompt, api_key=key_for_provider)
+        remediation = await asyncio.to_thread(provider_instance.generate_explanation, remediation_prompt, api_key=key_for_provider)
         
-        summary = "Sem resumo disponível."
-        remediation = "Consulte um especialista em segurança."
+        result = {
+            "summary": summary.strip() or "Sem resumo disponível.",
+            "remediation": remediation.strip() or "Consulte um especialista em segurança.",
+            "provider": provider_name
+        }
         
-        if "Remediação:" in response:
-            parts = response.split("Remediação:", 1)
-            summary = parts[0].replace("Resumo:", "").strip()
-            remediation = parts[1].strip()
-        else:
-            summary = response.strip()
-            
-        return {"summary": summary, "remediation": remediation}
+        # 4. Salvar no Cache (7 dias)
+        ai_cache.set(cache_key, result, expire=604800)
+        return result
+
+    except AIProviderError:
+        raise
     except Exception as e:
-        logger.error(f"Erro ao obter explicação da IA: {e}")
+        logger.error(f"Erro ao gerar explicação com IA (provedor: {provider_name}): {e}")
         return {
-            "summary": "Erro ao processar análise com IA.",
-            "remediation": "Revise os logs técnicos manualmente."
+            "summary": "Erro ao processar análise com IA. Verifique os logs.",
+            "remediation": "Revise os detalhes técnicos manualmente."
         }
 
-# --- Serviços de Rede ---
+@utils.log_execution
+async def build_pdf_for_analysis(analysis: Dict[str, Any]) -> BytesIO:
+    """
+    Gera um relatório PDF completo e profissional para qualquer tipo de análise.
+    Segue os padrões do The-APEX original.
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    
+    # Custom Styles
+    from reportlab.lib.styles import ParagraphStyle
+    
+    styles.add(ParagraphStyle(name='TitleAPEX', parent=styles['Heading1'], fontSize=24, textColor=colors.HexColor("#00bcd4"), alignment=1, spaceAfter=20))
+    styles.add(ParagraphStyle(name='SectionHeader', parent=styles['Heading2'], fontSize=16, textColor=colors.HexColor("#333333"), borderPadding=5, spaceBefore=15, spaceAfter=10))
+    styles.add(ParagraphStyle(name='Label', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name='Value', parent=styles['Normal'], fontSize=11, fontName='Courier', textColor=colors.HexColor("#000000")))
+
+    elements = []
+
+    # 1. Cabeçalho
+    elements.append(Paragraph("The APEX - Relatório de Investigação", styles['TitleAPEX']))
+    elements.append(Paragraph(f"Data de Emissão: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
+    elements.append(Spacer(1, 12))
+
+    # 2. Resumo da Análise
+    elements.append(Paragraph("1. Resumo da Investigação", styles['SectionHeader']))
+    
+    summary_data = [
+        [Paragraph("Identificador:", styles['Label']), Paragraph(str(analysis.get('item_identifier')), styles['Value'])],
+        [Paragraph("Tipo:", styles['Label']), Paragraph(str(analysis.get('item_type')).upper(), styles['Value'])],
+        [Paragraph("Veredito:", styles['Label']), Paragraph(str(analysis.get('final_verdict')).upper(), styles['Value'])],
+        [Paragraph("Data da Análise:", styles['Label']), Paragraph(_fmt_ts(analysis.get('created_at')), styles['Value'])]
+    ]
+    
+    table = Table(summary_data, colWidths=[120, 340])
+    table.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (0, -1), colors.whitesmoke),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('PADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+    # 3. Resumo Executivo (IA)
+    elements.append(Paragraph("2. Resumo Executivo (AI Analysis)", styles['SectionHeader']))
+    ai_summary = analysis.get('ai_analysis', {}).get('summary', 'Resumo não disponível.')
+    elements.append(Paragraph(_md_to_plain(ai_summary), styles['Normal']))
+    elements.append(Spacer(1, 20))
+
+    # 4. Detalhes Específicos por Tipo
+    elements.append(Paragraph("3. Detalhes Técnicos", styles['SectionHeader']))
+    
+    item_type = analysis.get('item_type')
+    
+    if item_type == 'audit':
+        scan = analysis.get('external', {}).get('scan_details', {})
+        machine = scan.get('machine', {})
+        elements.append(Paragraph(f"Máquina: {machine.get('hostname')} ({machine.get('os')})", styles['Normal']))
+        elements.append(Paragraph(f"IP: {machine.get('ip_primary')} | MAC: {machine.get('mac_address')}", styles['Normal']))
+        elements.append(Spacer(1, 10))
+        
+        # Hardening
+        elements.append(Paragraph("Configurações de Segurança:", styles['Normal']))
+        hardening = scan.get('hardening', {})
+        if isinstance(hardening, str): 
+            try: hardening = json.loads(hardening)
+            except: hardening = {}
+            
+        h_data = [[k, "Habilitado" if v is True else ("Desabilitado" if v is False else str(v))] for k, v in hardening.items()]
+        if h_data:
+            t_h = Table(h_data, colWidths=[230, 230])
+            t_h.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.grey), ('FONTSIZE', (0,0), (-1,-1), 9)]))
+            elements.append(t_h)
+            
+    elif item_type == 'vault':
+        vault = analysis.get('external', {})
+        elements.append(Paragraph(f"Total de Credenciais: {vault.get('total_entries')}", styles['Normal']))
+        elements.append(Paragraph(f"Entradas Suspeitas: {vault.get('suspicious_count')}", styles['Normal']))
+        elements.append(Spacer(1, 10))
+        
+        v_data = [["Alvo (Target)", "Tipo", "Usuário"]]
+        for e in vault.get('entries', [])[:20]:
+            v_data.append([e.get('target'), e.get('type'), e.get('user')])
+        
+        if len(v_data) > 1:
+            t_v = Table(v_data, colWidths=[200, 100, 160])
+            t_v.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('FONTSIZE', (0,0), (-1,-1), 8)
+            ]))
+            elements.append(t_v)
+
+    elif item_type == 'network':
+        net_data = analysis.get('external', {}).get('network_devices', [])
+        elements.append(Paragraph(f"Rede Analisada: {analysis.get('network_cidr')}", styles['Normal']))
+        elements.append(Spacer(1, 10))
+        
+        n_data = [["IP", "Nome/Fabricante", "MAC", "Portas"]]
+        for d in net_data:
+            n_data.append([d.get('ip'), d.get('name') or d.get('vendor'), d.get('mac'), ", ".join(map(str, d.get('open_ports', [])))])
+            
+        if len(n_data) > 1:
+            t_n = Table(n_data, colWidths=[80, 160, 110, 110])
+            t_n.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('FONTSIZE', (0,0), (-1,-1), 8)
+            ]))
+            elements.append(t_n)
+
+    else: # File or URL
+        ext_results = analysis.get('external', {})
+        res_data = [["Ferramenta", "Veredito", "Detalhes"]]
+        for tool, data in ext_results.items():
+            if tool in ['scan_details', 'network_devices']: continue
+            verdict = data.get('verdict', 'unknown')
+            details = str(data.get('positives', data.get('malicious', '-')))
+            res_data.append([tool, verdict, details])
+            
+        if len(res_data) > 1:
+            t_res = Table(res_data, colWidths=[150, 100, 210])
+            t_res.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            elements.append(t_res)
+
+    elements.append(Spacer(1, 20))
+
+    # 5. MITRE ATT&CK
+    mitre = analysis.get('mitre_attack', [])
+    if mitre:
+        elements.append(Paragraph("4. Táticas e Técnicas MITRE ATT&CK®", styles['SectionHeader']))
+        for m in mitre:
+            elements.append(Paragraph(f"<b>Tática:</b> {m.get('tactic')}", styles['Normal']))
+            for tech in m.get('techniques', []):
+                elements.append(Paragraph(f"• {tech.get('id')}: {tech.get('name')}", styles['Normal']))
+            elements.append(Spacer(1, 5))
+        elements.append(Spacer(1, 15))
+
+    # 6. Remediação
+    elements.append(Paragraph("5. Guia de Remediação e Recomendações", styles['SectionHeader']))
+    remediation = analysis.get('ai_analysis', {}).get('remediation', 'Consulte um especialista.')
+    elements.append(Paragraph(_md_to_plain(remediation), styles['Normal']))
+
+    # Finalização
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
 
 async def get_local_network_info() -> Dict[str, Any]:
     """Detecta automaticamente o IPv4 local e sugere um CIDR para varredura."""
@@ -241,7 +490,7 @@ async def run_alert_correlation(alerts: List[Dict[str, Any]], rules: Dict[str, A
         "scanned_at": now
     }
     
-    result["ai_analysis"] = await asyncio.to_thread(get_ai_explanation, result, ai_provider)
+    result["ai_analysis"] = await get_ai_explanation(result, ai_provider)
     result_id = await asyncio.to_thread(database.save_analysis, result)
     await send_to_siem(result)
     
@@ -267,93 +516,68 @@ async def _get_ai_reputation_bulk(names: List[str], ai_provider: str = 'groq') -
         return None
     try:
         provider = get_ai_provider(ai_provider)
+        api_key = _get_ai_key_for_provider(ai_provider)
         prompt = (
             "Avalie se os seguintes nomes de processo são geralmente seguros ou suspeitos, "
             "com uma breve explicação para cada:\n- " + "\n- ".join(names) + 
             "\nResponda em português, de forma objetiva."
         )
         safe_prompt = _truncate_prompt_by_tokens(prompt, settings.GROQ_MODEL)
-        return await asyncio.to_thread(provider.generate_explanation, safe_prompt, settings.AI_API_KEY)
+        return await asyncio.to_thread(provider.generate_explanation, safe_prompt, api_key=api_key)
     except Exception as e:
         logger.error(f"Erro na reputação IA: {e}")
         return None
 
 @utils.log_execution
-async def run_alert_correlation(alerts: List[Dict[str, Any]], rules: Dict[str, Any], ai_provider: str = None) -> str:
-    import time
+async def run_vault_analysis(ai_provider: str = None) -> str:
+    """Realiza uma auditoria de credenciais no Windows Vault."""
     ai_provider = ai_provider or 'groq'
-    # Normaliza entradas
-    def _norm(a):
-        return {
-            "ts": a.get("timestamp") or a.get("ts") or time.time(),
-            "severity": str(a.get("severity", "info")).lower(),
-            "source": a.get("source") or a.get("siem") or "unknown",
-            "ip": a.get("ip") or a.get("src_ip") or a.get("dst_ip"),
-            "domain": a.get("domain") or a.get("fqdn"),
-            "hash": a.get("hash") or a.get("sha256") or a.get("sha1"),
-            "hostname": a.get("hostname") or a.get("host"),
-            "event": a.get("event") or a.get("message") or ""
-        }
-    normalized = [_norm(a or {}) for a in (alerts or [])]
-    window_minutes = int(rules.get("window_minutes") or 15)
-    threshold = int(rules.get("threshold") or 3)
-    now = time.time()
-    start_cut = now - (window_minutes * 60)
-    recent = [a for a in normalized if float(a["ts"]) >= start_cut]
-    # Correlação por entidade
-    buckets: Dict[str, Dict[str, Any]] = {}
-    def _add(key, val, alert):
-        if not val: return
-        k = f"{key}:{val}"
-        b = buckets.setdefault(k, {"key": key, "value": val, "count": 0, "sources": set(), "samples": []})
-        b["count"] += 1
-        b["sources"].add(alert["source"])
-        if len(b["samples"]) < 5:
-            b["samples"].append(alert["event"])
-    for a in recent:
-        for key in ("ip", "domain", "hash", "hostname"):
-            _add(key, a.get(key), a)
-    # Incidentes quando excede threshold
-    incidents = []
-    for k, b in buckets.items():
-        sev = "low"
-        if b["count"] >= threshold:
-            sev = "medium"
-            if b["key"] in ("hash", "ip") and b["count"] >= threshold + 2:
-                sev = "high"
-        incidents.append({
-            "entity": {"type": b["key"], "value": b["value"]},
-            "count": b["count"],
-            "sources": sorted(list(b["sources"])),
-            "samples": b["samples"],
-            "severity": sev
-        })
-    # Veredito final
-    final_verdict = "clean"
-    if any(i["severity"] == "high" for i in incidents):
-        final_verdict = "malicious"
-    elif any(i["severity"] == "medium" for i in incidents):
-        final_verdict = "suspicious"
-    # IA resumo
+    logger.info("Iniciando auditoria do Windows Vault...")
+    
+    # 1. Coleta Credenciais
     try:
-        provider_instance = get_ai_provider(ai_provider)
-        prompt = "Resuma os incidentes correlacionados (português), indicando entidades, contagem e ações imediatas."
-        prompt = _truncate_prompt_by_tokens(prompt, settings.GROQ_MODEL)
-        ai_summary = await asyncio.to_thread(provider_instance.generate_explanation, prompt, settings.AI_API_KEY)
-        ai = {"summary": ai_summary, "remediation": "Isolar hosts afetados, bloquear IPs suspeitos e revisar credenciais comprometidas."}
-    except Exception:
-        ai = {"summary": "Falha ao gerar resumo por IA.", "remediation": ""}
-    # Persistência
-    result = {
-        "item_identifier": f"SOC Correlation ({len(incidents)} entidades correlacionadas)",
-        "item_type": "soc",
-        "final_verdict": final_verdict,
-        "external": {"correlation": {"window_minutes": window_minutes, "threshold": threshold, "incidents": incidents}},
-        "ai_analysis": ai,
-        "scanned_at": now
+        entries = audit_utils.get_vault_credentials()
+        # Filtrar entradas suspeitas (ex: URLs, endereços IP, ou nomes estranhos)
+        suspicious_entries = [e for e in entries if '.' in e.get('target', '') or 'http' in e.get('target', '').lower()]
+    except Exception as e:
+        logger.error(f"Erro ao coletar Vault: {e}")
+        entries = []
+        suspicious_entries = []
+
+    # 2. Dados da Análise
+    vault_data = {
+        "total_entries": len(entries),
+        "suspicious_count": len(suspicious_entries),
+        "entries": entries[:50], # Limite para evitar estouro de tokens
+        "status": "COMPLETED"
     }
-    result_id = await asyncio.to_thread(database.save_analysis, result)
-    return result_id
+
+    # 3. Veredito Final
+    final_verdict = "clean"
+    if len(suspicious_entries) > 5:
+        final_verdict = "malicious"
+    elif len(suspicious_entries) > 0:
+        final_verdict = "suspicious"
+
+    # 4. Consolidação
+    result = {
+        "item_identifier": f"Windows Vault Audit ({len(entries)} credenciais)",
+        "item_type": "vault",
+        "final_verdict": final_verdict,
+        "external": vault_data,
+        "scanned_at": time.time(),
+        "created_at": time.time()
+    }
+
+    # 5. Explicação IA
+    ai_result = await get_ai_explanation(result, ai_provider)
+    result["ai_analysis"] = ai_result
+    
+    # 6. Persistência
+    rid = await asyncio.to_thread(database.save_analysis, result)
+    await send_to_siem(result)
+    
+    return rid
 
 @utils.log_execution
 async def run_system_scan(module_type: str, ai_provider: str = None) -> Dict[str, Any]:
@@ -389,7 +613,7 @@ async def run_system_scan(module_type: str, ai_provider: str = None) -> Dict[str
         raise ValueError(f"Módulo desconhecido: {module_type}")
 
     # Análise genérica via IA para malware/network mocks
-    ai_result = await asyncio.to_thread(get_ai_explanation, scan_data, ai_provider)
+    ai_result = await get_ai_explanation(scan_data, ai_provider)
     
     return {
         "raw_data": scan_data,
@@ -433,6 +657,7 @@ async def _analyze_windows_audit(ai_provider: str) -> Dict[str, Any]:
         "processes_count": len(processes),
         "processes_sample": processes,
         "services_running": len(services),
+        "services_sample": services,
         "startup_entries": startup_entries,
         "scheduled_tasks": scheduled_tasks,
         "hardening": hardening_status,
@@ -440,19 +665,20 @@ async def _analyze_windows_audit(ai_provider: str) -> Dict[str, Any]:
         "status": "COMPLETED"
     }
 
-    ai_result = await asyncio.to_thread(get_ai_explanation, scan_data, ai_provider)
-    
     result = {
         "item_identifier": f"Windows Audit: {machine_info['hostname']}",
         "item_type": "audit",
         "final_verdict": "suspicious" if "suspicious" in (reputation or "").lower() else "clean",
         "external": {"scan_details": scan_data},
         "created_at": time.time(),
-        "scanned_at": time.time(),
-        "ai_analysis": ai_result
+        "scanned_at": time.time()
     }
+
+    # 9. Explicação IA unificada
+    ai_result = await get_ai_explanation(result, ai_provider)
+    result["ai_analysis"] = ai_result
     
-    # Salva como análise comum para que o usuário possa ver o resultado agora
+    # 10. Persistência
     rid = await asyncio.to_thread(database.save_analysis, result)
     await send_to_siem(result)
     
@@ -504,7 +730,7 @@ async def run_file_analysis(content: bytes, filename: str, ai_provider: str = No
 
     # 5. MITRE & IA
     final_result['mitre_attack'] = utils.get_mitre_attack_info(final_result)
-    final_result['ai_analysis'] = await asyncio.to_thread(get_ai_explanation, final_result, ai_provider)
+    final_result['ai_analysis'] = await get_ai_explanation(final_result, ai_provider)
 
     # 6. Persistência e SIEM
     result_id = await asyncio.to_thread(database.save_analysis, final_result)
@@ -512,116 +738,12 @@ async def run_file_analysis(content: bytes, filename: str, ai_provider: str = No
     
     return result_id
 
-async def run_url_analysis(url: str, ai_provider: str = None) -> str:
-    """Orquestra a análise completa de uma URL de forma assíncrona."""
-    logger.info(f"Iniciando análise para a URL: {url}")
-    ai_provider = ai_provider or 'groq'
-
-    # 1. Análise Externa
-    url_backends = get_url_analysis_backends()
-    tasks = [backend.analyze_url(url) for backend in url_backends]
-    results_list = await asyncio.gather(*tasks, return_exceptions=True)
-
-    external_results = {}
-    for backend, result in zip(url_backends, results_list):
-        if isinstance(result, Exception):
-            logger.error(f"Erro no backend {backend.name}: {result}")
-            external_results[backend.name] = {"error": str(result), "verdict": "unknown"}
-        else:
-            external_results[backend.name] = result
-
-    # 2. Consolidação
-    final_result = {
-        "item_identifier": url,
-        "item_type": "url",
-        "scanned_at": time.time(),
-        "external": external_results
-    }
-    
-    # Veredito simples baseado em backends de URL
-    verdicts = [r.get('verdict') for r in external_results.values() if isinstance(r, dict)]
-    if 'malicious' in verdicts: final_result['final_verdict'] = 'malicious'
-    elif 'suspicious' in verdicts: final_result['final_verdict'] = 'suspicious'
-    else: final_result['final_verdict'] = 'clean'
-
-    # 3. IA e Persistência
-    final_result['ai_analysis'] = await asyncio.to_thread(get_ai_explanation, final_result, ai_provider)
-    result_id = await asyncio.to_thread(database.save_analysis, final_result)
-    await send_to_siem(final_result)
-    
-    return result_id
-
-
-
-@utils.log_execution
-async def run_vault_analysis(ai_provider: str = None) -> Dict[str, Any]:
-    """Realiza uma auditoria no Windows Vault em busca de credenciais suspeitas (sem salvar histórico)."""
-    ai_provider = ai_provider or 'groq'
-    logger.info("Iniciando auditoria automática do Windows Vault...")
-    try:
-        machine_info = audit_utils.get_machine_info()
-        
-        # Coleta via cmdkey
-        proc = await asyncio.create_subprocess_exec("cmdkey", "/list", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        out, _ = await proc.communicate()
-        text = out.decode(errors="ignore")
-        
-        entries = []
-        current = {}
-        for line in text.splitlines():
-            line = line.strip()
-            if line.lower().startswith("target:"):
-                if current: entries.append(current)
-                current = {"target": line.split(":", 1)[1].strip()}
-            elif line.lower().startswith("type:"):
-                current["type"] = line.split(":", 1)[1].strip()
-            elif line.lower().startswith("user:"):
-                current["user"] = line.split(":", 1)[1].strip()
-        if current: entries.append(current)
-
-        suspicious = [e for e in entries if e.get("target", "").startswith("http") or "." in e.get("target", "")]
-        status = "ALERT" if suspicious else "CLEAN"
-        
-        # Resultado temporário para exibição (não salva no histórico de auditoria)
-        result = {
-            "item_identifier": f"Windows Vault: {machine_info['hostname']}",
-            "item_type": "vault",
-            "final_verdict": "suspicious" if status == "ALERT" else "clean",
-            "external": {"status": status, "total_entries": len(entries), "suspicious_count": len(suspicious), "entries": entries},
-            "created_at": time.time(),
-            "scanned_at": time.time()
-        }
-        
-        result["ai_analysis"] = await asyncio.to_thread(get_ai_explanation, result, ai_provider)
-        # Salva apenas na tabela de análises gerais se necessário, ou retorna apenas para a UI
-        # Para manter fora do histórico solicitado, podemos salvar como análise comum ou não salvar nada
-        # Se o usuário quer "fora do histórico", talvez ele queira dizer a tabela de auditoria específica.
-        # Vamos salvar como análise normal para que o resultado apareça na tela de resultados.
-        rid = await asyncio.to_thread(database.save_analysis, result)
-        await send_to_siem(result)
-        
-        return rid
-    except Exception as e:
-        logger.error(f"Erro na análise do Vault: {e}")
-        raise
-
-def enqueue_file_analysis(content: bytes, filename: str, ai_provider: str = None) -> str:
-    """Enfileira a análise de arquivo no Celery."""
-    temp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_{filename}")
-    with open(temp_path, 'wb') as f:
-        f.write(content)
-    
-    from .tasks import execute_file_analysis_task
-    task = execute_file_analysis_task.delay(temp_path, filename, ai_provider)
-    return task.id
-
 @utils.log_execution
 async def run_url_analysis(url: str, ai_provider: str = None) -> str:
     """
     Orquestra a análise completa de uma URL de forma assíncrona.
     """
-    ai_provider = 'groq'
-
+    ai_provider = ai_provider or 'groq'
     logger.info(f"Iniciando análise para a URL: {url}")
 
     # 1. Análise Externa em Paralelo com asyncio.gather
@@ -647,8 +769,7 @@ async def run_url_analysis(url: str, ai_provider: str = None) -> str:
     final_result['mitre_attack'] = utils.get_mitre_attack_info(final_result)
     
     # 4. Análise com IA
-    # Executa em thread separada para não bloquear o loop de eventos do Quart
-    final_result['ai_analysis'] = await asyncio.to_thread(get_ai_explanation, final_result, ai_provider)
+    final_result['ai_analysis'] = await get_ai_explanation(final_result, ai_provider)
 
     # 5. Persistência e Integração SIEM
     result_id = await asyncio.to_thread(database.save_analysis, final_result)
@@ -656,124 +777,20 @@ async def run_url_analysis(url: str, ai_provider: str = None) -> str:
     logger.info(f"Análise concluída para {url}. ID do resultado: {result_id}")
     return result_id
 
-def _md_to_plain(md_text: str) -> str:
-    try:
-        import markdown as md
-        html = md.markdown(md_text or "")
-        # Remove tags simples
-        return re.sub(r"<[^>]+>", "", html)
-    except Exception:
-        return md_text or ""
-
-def build_pdf_for_analysis(analysis: Dict[str, Any]) -> bytes:
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=36, bottomMargin=36, leftMargin=36, rightMargin=36)
-    styles = getSampleStyleSheet()
-    story = []
-
-    title = Paragraph("Resultado da Análise", styles["Title"])
-    story.append(title)
-    story.append(Spacer(1, 12))
-    subtitle = Paragraph("Detalhes completos da investigação.", styles["Italic"])
-    story.append(subtitle)
-    story.append(Spacer(1, 18))
-
-    def _fmt_ts(v):
-        try:
-            return datetime.fromtimestamp(int(float(v))).strftime('%d/%m/%Y %H:%M:%S')
-        except Exception:
-            return "-"
-    info = [
-        Paragraph(f"<b>Identificador:</b> {analysis.get('item_identifier','-')}", styles["Normal"]),
-        Paragraph(f"<b>Tipo:</b> {analysis.get('item_type','-')}", styles["Normal"]),
-        Paragraph(f"<b>Veredito Final:</b> {analysis.get('final_verdict','unknown')}", styles["Normal"]),
-        Paragraph(f"<b>Data:</b> {_fmt_ts(analysis.get('created_at'))}", styles["Normal"]),
-    ]
-    for p in info:
-        story.append(p)
-        story.append(Spacer(1, 6))
-
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("Resumo Executivo", styles["Heading2"]))
-    summary_txt = analysis.get("ai_analysis", {}).get("summary") if isinstance(analysis.get("ai_analysis"), dict) else None
-    story.append(Paragraph(_md_to_plain(summary_txt or "Resumo não disponível."), styles["BodyText"]))
-    story.append(Spacer(1, 12))
-
-    story.append(Paragraph("Táticas e Técnicas do MITRE ATT&CK", styles["Heading2"]))
-    mitre = analysis.get("mitre_attack")
-    if isinstance(mitre, list) and mitre:
-        for t in mitre[:10]:
-            story.append(Paragraph(f"Tática: {t.get('tactic','-')}", styles["BodyText"]))
-            techs = t.get("techniques") or []
-            for tech in techs[:10]:
-                story.append(Paragraph(f"- {tech.get('id','')} {tech.get('name','')}", styles["BodyText"]))
-            story.append(Spacer(1,6))
-    elif isinstance(mitre, dict) and mitre:
-        story.append(Paragraph(f"Tática: {mitre.get('tactic','-')}", styles["BodyText"]))
-        story.append(Paragraph(f"Técnica: {mitre.get('technique','-')}", styles["BodyText"]))
-    else:
-        story.append(Paragraph("Nenhuma informação do MITRE ATT&CK foi encontrada.", styles["BodyText"]))
-    story.append(Spacer(1, 12))
-    story.append(PageBreak())
-
-    if analysis.get("item_type") == "network":
-        story.append(Paragraph("Dispositivos Descobertos", styles["Heading2"]))
-        devices = analysis.get("external", {}).get("network_devices") or []
-        if devices:
-            data = [["IP","Hostname","MAC","Portas","Serviços"]]
-            for d in devices:
-                ports = ", ".join(str(p) for p in (d.get("open_ports") or []))
-                svcs = ", ".join(f"{s.get('service','?')}({s.get('port','?')})" for s in (d.get("services") or [])[:8])
-                data.append([d.get("ip","-"), d.get("hostname","-") or "-", d.get("mac","-") or "-", ports or "-", svcs or "-"])
-            table = Table(data, repeatRows=1)
-            table.setStyle(TableStyle([
-                ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
-                ('TEXTCOLOR',(0,0),(-1,0),colors.black),
-                ('GRID',(0,0),(-1,-1),0.25,colors.grey),
-                ('FONT',(0,0),(-1,0),'Helvetica-Bold'),
-                ('ALIGN',(0,0),(-1,-1),'LEFT'),
-            ]))
-            story.append(table)
-        else:
-            story.append(Paragraph("Nenhum dispositivo ativo foi descoberto.", styles["BodyText"]))
-        story.append(Spacer(1, 12))
-        story.append(PageBreak())
-
-    story.append(Paragraph("Resultados por Ferramenta", styles["Heading2"]))
-    external = analysis.get("external") or {}
-    if external:
-        rows = [["Fonte","Veredito","Detalhes"]]
-        for name, data in list(external.items())[:20]:
-            if isinstance(data, dict):
-                verdict = (data or {}).get("verdict") or "unknown"
-                try:
-                    details = json.dumps(data, ensure_ascii=False)[:1200]
-                except Exception:
-                    details = str(data)[:1200]
-            else:
-                verdict = "unknown"
-                details = str(data)[:1200]
-            rows.append([name, verdict, details])
-        table = Table(rows, repeatRows=1, colWidths=[100,80,300])
-        table.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
-            ('GRID',(0,0),(-1,-1),0.25,colors.grey),
-            ('VALIGN',(0,0),(-1,-1),'TOP'),
-        ]))
-        story.append(table)
-    else:
-        story.append(Paragraph("Sem resultados externos.", styles["BodyText"]))
-    story.append(Spacer(1, 12))
-    story.append(PageBreak())
-
-    story.append(Paragraph("Orientações de Remediação", styles["Heading2"]))
-    remediation_txt = analysis.get("ai_analysis", {}).get("remediation") if isinstance(analysis.get("ai_analysis"), dict) else None
-    story.append(Paragraph(_md_to_plain(remediation_txt or "Remediação não disponível."), styles["BodyText"]))
-
-    doc.build(story)
-    pdf_bytes = buf.getvalue()
-    buf.close()
-    return pdf_bytes
+async def enqueue_file_analysis(content: bytes, filename: str, ai_provider: str = None) -> str:
+    """
+    Salva o arquivo temporariamente e coloca a tarefa na fila do Celery.
+    """
+    temp_dir = tempfile.gettempdir()
+    safe_filename = "".join([c for c in filename if c.isalnum() or c in ('.', '_', '-')]).strip()
+    temp_path = os.path.join(temp_dir, f"apex_{uuid.uuid4()}_{safe_filename}")
+    
+    with open(temp_path, 'wb') as f:
+        f.write(content)
+        
+    from .tasks import execute_file_analysis_task
+    task = execute_file_analysis_task.delay(temp_path, filename, ai_provider)
+    return task.id
 
 @utils.log_execution
 async def run_network_analysis(mode: str = 'quick', cidr: str = None, ai_provider: str = None) -> str:
@@ -970,7 +987,7 @@ async def run_network_analysis(mode: str = 'quick', cidr: str = None, ai_provide
         "item_type": "network"
     }
     result["mitre_attack"] = utils.get_mitre_attack_info(result)
-    result["ai_analysis"] = await asyncio.to_thread(get_ai_explanation, result, ai_provider)
+    result["ai_analysis"] = await get_ai_explanation(result, ai_provider)
     save_id = await asyncio.to_thread(database.save_analysis, {"filename": result["network_cidr"], **result})
     await send_to_siem(result)
     return save_id
@@ -1084,36 +1101,6 @@ def _get_ai_key_for_provider(provider_name: str) -> str:
     
     return all_keys[0]
 
-def get_ai_explanation(analysis_result: Dict[str, Any], ai_provider: str = None) -> Dict[str, Any]:
-    """
-    Gera uma explicação em linguagem natural do resultado da análise.
-    Ele lida com múltiplas chaves de IA configuradas, selecionando a correta para o provedor.
-    """
-    provider_name = ai_provider or settings.AI_PROVIDER_DETECTED or 'groq'
-    if not provider_name:
-        raise AIProviderError("Nenhum provedor de IA configurado ou detectado.")
-
-    try:
-        key_for_provider = _get_ai_key_for_provider(provider_name)
-        provider_instance = get_ai_provider(provider_name)
-        summary_prompt = _build_ai_prompt(analysis_result, provider_name)
-        remediation_prompt = _build_ai_remediation_prompt(analysis_result, provider_name)
-        cache_key = hashlib.sha256(f"{provider_name}:{summary_prompt}:{remediation_prompt}".encode('utf-8')).hexdigest()
-        cached_response = ai_cache.get(cache_key)
-        if cached_response:
-            logger.info(f"Retornando resposta de IA do cache para {provider_name}")
-            return cached_response
-        summary = provider_instance.generate_explanation(summary_prompt, api_key=key_for_provider)
-        remediation = provider_instance.generate_explanation(remediation_prompt, api_key=key_for_provider)
-        result = {"summary": summary, "remediation": remediation, "provider": provider_name}
-        ai_cache.set(cache_key, result, expire=604800)
-        return result
-    except AIProviderError:
-        raise
-    except Exception as e:
-        logger.error(f"Erro ao gerar explicação com IA (provedor: {provider_name}): {e}")
-        raise AIProviderError(f"Houve um erro de comunicação com o serviço de IA: {e}. A análise não pôde ser gerada.")
-
 def get_ai_interpretation_for_threats(threats: List[Dict[str, str]]) -> str:
     """
     Gera uma interpretação por IA para a lista de ameaças nacionais.
@@ -1131,212 +1118,307 @@ def get_ai_interpretation_for_threats(threats: List[Dict[str, str]]) -> str:
         threats_json = json.dumps(relevant_data, indent=2, ensure_ascii=False)
         
         prompt = (
-            "Você é um especialista em inteligência de ameaças focado no Brasil.\n"
-            "Interprete os seguintes alertas recentes do CERT.br. Forneça um resumo executivo "
+            "Você é um especialista em inteligência de ameaças focado no Brasil e no Governo Federal.\n"
+            "Interprete os seguintes alertas recentes do CTIR Gov. Forneça um resumo executivo "
             "do cenário atual de ameaças no país e 3 recomendações práticas de proteção.\n\n"
-            "IMPORTANTE: Você deve incluir os links das fontes originais (campos 'url') no final do seu resumo "
-            "para que o usuário possa consultar os detalhes se desejar.\n\n"
-            f"**Alertas Recentes:**\n```json\n{threats_json}\n```\n\n"
+            "IMPORTANTE: Você deve incluir os links das fontes oficiais (campos 'url') no final do seu resumo "
+            "para que o usuário possa consultar os detalhes originais no portal do governo.\n\n"
+            f"**Alertas Recentes do CTIR Gov:**\n```json\n{threats_json}\n```\n\n"
             "Responda em PORTUGUÊS, de forma clara e profissional, usando Markdown."
         )
         
+        # Tenta carregar do cache específico primeiro
         cache_key = hashlib.sha256(f"threat_ai_v1:{threats_json}:{provider_name}".encode('utf-8')).hexdigest()
         cached = ai_cache.get(cache_key)
-        if cached:
-            return cached
-
-        interpretation = provider_instance.generate_explanation(prompt, api_key=key)
-        ai_cache.set(cache_key, interpretation, expire=7200) # 2 horas de cache
-        return interpretation
+        
+        # Fallback para o último resumo bem-sucedido (independente dos alertas exatos)
+        last_good_key = f"threat_ai_last_good_{provider_name}"
+        last_good = ai_cache.get(last_good_key)
+        
+        try:
+            # Se não tem cache específico ou queremos atualizar, tentamos a IA
+            interpretation = provider_instance.generate_explanation(prompt, api_key=key)
+            ai_cache.set(cache_key, interpretation, expire=7200) # 2 horas
+            ai_cache.set(last_good_key, interpretation, expire=604800) # 7 dias para o "último bom"
+            return interpretation
+        except Exception as ai_err:
+            logger.warning(f"IA falhou ao gerar interpretação (limite ou erro): {ai_err}")
+            # Se a IA falhou mas temos cache específico, retornamos ele
+            if cached:
+                return cached + "\n\n*(Nota: Análise em cache)*"
+            
+            # Se não tem cache específico mas temos o "último bom" de qualquer consulta anterior
+            if last_good:
+                return last_good + "\n\n*(Nota: Exibindo última análise disponível devido ao limite da IA)*"
+            
+            # Se não tem nada, mensagem amigável
+            return "O resumo inteligente não pôde ser gerado agora (limite de uso atingido). Use os links ao lado para detalhes oficiais do CTIR Gov."
     except Exception as e:
-        logger.error(f"Erro na interpretação de IA para ameaças: {e}")
-        return f"Não foi possível gerar a interpretação automática agora: {str(e)}"
-
-
-def _prune_data_for_prompt(data: Any) -> Any:
-    """
-    Reduz a complexidade dos dados (Big O) antes da serialização JSON.
-    Remove campos verbosos e trunca listas para economizar tokens e processamento.
-    """
-    if isinstance(data, dict):
-        # Remove campos binários ou muito grandes que não ajudam no resumo executivo
-        return {k: _prune_data_for_prompt(v) for k, v in data.items() 
-                if k not in ['strings', 'hex_dump', 'raw_response', 'response_body', 'content']}
-    elif isinstance(data, list):
-        # Limita listas a 20 itens (ex: listas de imports/exports podem ter milhares)
-        return [_prune_data_for_prompt(i) for i in data[:20]]
-    elif isinstance(data, str):
-        # Trunca strings individuais muito longas
-        return data[:500] + "..." if len(data) > 500 else data
-    return data
-
-def _build_ai_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
-    item_type = "arquivo" if "sha256" in result else ("rede" if result.get("devices") else "URL")
-    identifier = result.get('filename') or result.get('url') or result.get('network_cidr')
-    verdict = result.get('final_verdict', 'desconhecido')
-    
-    pruned_result = _prune_data_for_prompt(result)
-
-    prompt = (
-        f"Você é um analista de segurança cibernética sênior. Sua tarefa é fornecer um resumo executivo "
-        f"claro e conciso sobre a análise de {item_type}.\n\n"
-        f"**Item Analisado:** `{identifier}`\n"
-        f"**Veredito Final:** **{verdict.upper()}**\n\n"
-        f"**Contexto:**\n"
-        f"O item foi analisado por múltiplas ferramentas de segurança. Abaixo estão os dados brutos.\n\n"
-        f"**Instruções Específicas:**\n"
-        f"1. Identifique o CONTEÚDO do item (ex: se é um site de apostas, phishing, ferramenta legítima, etc).\n"
-        f"2. Explique em LINGUAGEM SIMPLES E DIRETA (para um público não técnico) o que foi encontrado.\n"
-        f"3. Se o veredito for 'malicioso' ou 'suspeito', explique os principais riscos.\n"
-        f"4. Se for 'limpo', confirme que nenhuma ameaça foi detectada pelas ferramentas.\n"
-        f"5. Se houver dados do MITRE ATT&CK, inclua uma seção 'Análise MITRE ATT&CK' explicando as táticas e técnicas identificadas.\n\n"
-        f"Seja objetivo e evite jargões.\n\n"
-        f"**Dados da Análise:**\n"
-        f"```json\n{json.dumps(pruned_result, indent=2, ensure_ascii=False)}\n```\n\n"
-        f"**Seu Resumo Executivo (em português, formato Markdown):**\n"
-    )
-
-    ai_provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
-    if ai_provider_name == 'gemini':
-        model_name = settings.GEMINI_MODEL
-    elif ai_provider_name == 'grok':
-        model_name = getattr(settings, 'GROK_MODEL', 'grok-beta')
-    else:
-        model_name = settings.GROQ_MODEL
-
-    return _truncate_prompt_by_tokens(prompt, model_name)
-
-def _build_ai_remediation_prompt(result: Dict[str, Any], ai_provider: str = None) -> str:
-    item_type = "arquivo" if "sha256" in result else ("rede" if result.get("devices") else "URL")
-    identifier = result.get('filename') or result.get('url') or result.get('network_cidr')
-    verdict = result.get('final_verdict', 'desconhecido')
-    pruned_result = _prune_data_for_prompt(result)
-    prompt = (
-        f"Você é um especialista em resposta a incidentes. Com base nos dados a seguir, produza orientações de remediação práticas para {item_type}.\n\n"
-        f"**Item:** `{identifier}`\n"
-        f"**Veredito:** **{verdict.upper()}**\n\n"
-        f"Escreva em português, formato Markdown, estruturando em Ações Imediatas, Contenção, Erradicação, Recuperação e Verificações Pós-Remediação. "
-        f"Se o veredito for 'limpo', indique apenas boas práticas de prevenção e monitoramento. Seja específico e acionável.\n\n"
-        f"**Dados da Análise:**\n"
-        f"```json\n{json.dumps(pruned_result, indent=2, ensure_ascii=False)}\n```\n\n"
-        f"**Orientações de Remediação:**\n"
-    )
-    ai_provider_name = ai_provider or settings.AI_PROVIDER_DETECTED
-    if ai_provider_name == 'gemini':
-        model_name = settings.GEMINI_MODEL
-    elif ai_provider_name == 'grok':
-        model_name = getattr(settings, 'GROK_MODEL', 'grok-beta')
-    else:
-        model_name = settings.GROQ_MODEL
-    return _truncate_prompt_by_tokens(prompt, model_name)
+        logger.error(f"Erro crítico na interpretação de IA para ameaças: {e}")
+        return "Serviço de inteligência temporariamente indisponível."
 
 def get_latest_news(limit: int = 3) -> List[Dict[str, str]]:
+    """
+    Obtém as últimas notícias cibernéticas de fontes confiáveis.
+    """
     try:
-        cached = news_cache.get("latest")
+        now = datetime.now()
+        logger.info(f"Buscando notícias cibernéticas... (limit={limit})")
+        cached_data = news_cache.get("latest_v3")
+        
+        # Se temos cache e ele é recente (menos de 2 horas), usamos ele
+        if cached_data:
+            cache_time = cached_data.get("timestamp", 0)
+            if (now.timestamp() - cache_time) < 7200: # 2 horas
+                return cached_data["items"][:limit]
+
+        items = []
+        
+        # Fonte 1: CaveiraTech
+        try:
+            resp = requests.get("https://caveiratech.com", timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            if resp.status_code == 200:
+                html = resp.text
+                # Regex mais flexível para capturar notícias do CaveiraTech
+                for m in re.finditer(r'(\d{4}-\d{2}-\d{2}).{0,500}?([A-Z][^:]{10,250}):(.{20,400}?)Leia mais', html, flags=re.S):
+                    date = m.group(1).strip()
+                    title = re.sub(r'\s+', ' ', m.group(2)).strip()
+                    summary = re.sub(r'\s+', ' ', m.group(3)).strip()
+                    # Remove tags HTML residuais
+                    title = re.sub(r'<[^>]+>', '', title)
+                    summary = re.sub(r'<[^>]+>', '', summary)
+                    
+                    if len(title) > 10:
+                        items.append({
+                            "date": date, 
+                            "title": title, 
+                            "summary": summary, 
+                            "url": "https://caveiratech.com"
+                        })
+                    if len(items) >= limit + 5: break
+        except Exception as e:
+            logger.warning(f"Erro ao buscar notícias do CaveiraTech: {e}")
+
+        # Se não conseguimos nada, tentamos uma fonte secundária ou usamos o cache antigo
+        if not items and cached_data:
+            return cached_data["items"][:limit]
+            
+        if not items:
+            # Fallback com notícias atuais (exemplo)
+            items = [
+                {"date": now.strftime("%Y-%m-%d"), "title": "Aumento de ataques de Ransomware em infraestruturas críticas", "summary": "Relatórios apontam crescimento de 30% em ataques direcionados a setores de energia e saúde no último trimestre.", "url": "https://www.cisa.gov/news-events/cybersecurity-advisories"},
+                {"date": now.strftime("%Y-%m-%d"), "title": "Novas vulnerabilidades críticas corrigidas em navegadores populares", "summary": "Google e Mozilla lançam atualizações de emergência para corrigir falhas de dia zero exploradas ativamente.", "url": "https://www.bleepingcomputer.com"},
+                {"date": now.strftime("%Y-%m-%d"), "title": "IA generativa sendo utilizada para criar phishings mais convincentes", "summary": "Analistas alertam para o uso de LLMs na automação de campanhas de engenharia social altamente personalizadas.", "url": "https://thehackernews.com"},
+            ]
+            
+        # Ordenação por data
+        items.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        final_items = items[:limit]
+        news_cache.set("latest_v3", {"items": final_items, "timestamp": now.timestamp()}, expire=86400)
+        return final_items
+    except Exception as e:
+        logger.error(f"Erro em get_latest_news: {e}")
+        if cached_data: return cached_data["items"][:limit]
+        return []
+
+def get_featured_cves(limit: int = 5) -> List[Dict[str, str]]:
+    """
+    Obtém CVEs em destaque (Explorados Recentemente - CISA KEV).
+    """
+    try:
+        cached = news_cache.get("featured_cves_v1")
         if cached:
             return cached[:limit]
-        resp = requests.get("https://caveiratech.com", timeout=8)
-        html = resp.text
-        items = []
-        for m in re.finditer(r'(\d{4}-\d{2}-\d{2}).{0,400}?([A-Z][^:]{10,200}):(.{20,300}?)Leia mais', html, flags=re.S):
-            date = m.group(1).strip()
-            title = re.sub(r'\s+', ' ', m.group(2)).strip()
-            summary = re.sub(r'\s+', ' ', m.group(3)).strip()
-            items.append({"date": date, "title": title, "summary": summary, "url": "https://caveiratech.com"})
-            if len(items) >= limit:
-                break
-        if not items:
-            items = [
-                {"date": "2025-12-26", "title": "China-linked APT usa envenenamento de DNS para ataques direcionados", "summary": "Evasive Panda distribui MgBot via ataques AitM com atualizações falsas.", "url": "https://caveiratech.com"},
-                {"date": "2025-12-26", "title": "Trust Wallet alerta para atualização urgente após ataque", "summary": "Extensão 2.68 no Chrome continha código que roubava frases mnemônicas.", "url": "https://caveiratech.com"},
-                {"date": "2025-12-26", "title": "Falha crítica no LangChain Core permite roubo de segredos", "summary": "CVE-2025-68664 habilita injeção de objetos e execução maliciosa.", "url": "https://caveiratech.com"},
-            ]
-        news_cache.set("latest", items, expire=3600)
-        return items[:limit]
-    except Exception:
-        return [
-            {"date": "2025-12-26", "title": "China-linked APT usa envenenamento de DNS para ataques direcionados", "summary": "Evasive Panda distribui MgBot via ataques AitM com atualizações falsas.", "url": "https://caveiratech.com"}
-        ]
+            
+        # Usando o feed do CISA KEV (Known Exploited Vulnerabilities)
+        resp = requests.get("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            vulnerabilities = data.get("vulnerabilities", [])
+            
+            # Ordena por data de adição (mais recentes primeiro)
+            vulnerabilities.sort(key=lambda x: x.get("dateAdded", ""), reverse=True)
+            
+            items = []
+            for v in vulnerabilities[:limit]:
+                items.append({
+                    "id": v.get("cveID"),
+                    "vendor": v.get("vendorProject"),
+                    "product": v.get("product"),
+                    "title": f"{v.get('cveID')} - {v.get('vulnerabilityName')}",
+                    "summary": v.get("shortDescription"),
+                    "date": v.get("dateAdded"),
+                    "url": f"https://nvd.nist.gov/vuln/detail/{v.get('cveID')}"
+                })
+            
+            news_cache.set("featured_cves_v1", items, expire=43200) # 12 horas
+            return items
+            
+        return []
+    except Exception as e:
+        logger.error(f"Erro ao buscar CVEs: {e}")
+        return []
 
 def get_br_threat_trends(limit: int = 5) -> List[Dict[str, str]]:
     """
-    Obtém tendências de ameaças e alertas nacionais (CERT.br e CTIR Gov).
+    Obtém tendências de ameaças e alertas nacionais (CTIR Gov).
+    Foca nos 5 alertas mais recentes.
     """
     try:
-        cached = news_cache.get("br_alerts_v2")
-        if cached:
+        # Forçamos o limite a ser sempre 5 para atender à solicitação do usuário
+        limit = 5
+        
+        cached = news_cache.get("br_alerts_v4")
+        # Se o cache existe e tem o tamanho correto, retornamos
+        if cached and len(cached) >= limit:
             return cached[:limit]
             
         items = []
-        feeds = [
-            {"url": "https://www.cert.br/rss/certbr-rss.xml", "source": "CERT.br"},
-            {"url": "https://www.gov.br/ctir/pt-br/assuntos/alertas-e-avisos/alertas/RSS", "source": "CTIR Gov"}
-        ]
+        now = datetime.now()
+        current_year = now.year
         
-        import xml.etree.ElementTree as ET
-        from datetime import datetime
-        
-        for feed in feeds:
-            try:
-                resp = requests.get(feed["url"], timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-                if resp.status_code == 200:
-                    logger.debug(f"Feed {feed['source']} retornado com sucesso. Tamanho: {len(resp.content)}")
-                    try:
-                        root = ET.fromstring(resp.content)
-                        items_found = root.findall('.//item')
-                        logger.debug(f"Itens encontrados no feed {feed['source']}: {len(items_found)}")
+        # 1. Scraper robusto para CTIR Gov
+        try:
+            # Primeiro, consulta a página principal fornecida pelo usuário
+            ctir_main_url = "https://www.gov.br/ctir/pt-br/assuntos/alertas-e-recomendacoes/alertas"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            resp_main = requests.get(ctir_main_url, timeout=15, headers=headers)
+            
+            urls_to_check = [ctir_main_url]
+            
+            if resp_main.status_code == 200:
+                soup_main = BeautifulSoup(resp_main.content, 'html.parser')
+                # Procura pelo link do ano atual na página principal, priorizando caminhos de alertas
+                year_link = soup_main.find('a', href=re.compile(rf'.*/alertas/{current_year}(/view)?$')) or \
+                            soup_main.find('a', string=re.compile(rf'^\s*{current_year}\s*$')) or \
+                            soup_main.find('a', title=re.compile(rf'.*{current_year}.*'))
+                
+                if year_link:
+                    year_url = year_link.get('href')
+                    if year_url:
+                        if not year_url.startswith('http'):
+                            year_url = f"https://www.gov.br{year_url}"
+                        urls_to_check.append(year_url)
+                
+                # Sempre adiciona o ano atual construído se não encontrado
+                constructed_year_url = f"{ctir_main_url}/{current_year}"
+                if constructed_year_url not in urls_to_check:
+                    urls_to_check.append(constructed_year_url)
+
+                # Adiciona o ano anterior para garantir que tenhamos pelo menos 5 alertas recentes
+                prev_year = current_year - 1
+                prev_year_link = soup_main.find('a', href=re.compile(rf'.*/alertas/{prev_year}(/view)?$')) or \
+                                 soup_main.find('a', string=re.compile(rf'^\s*{prev_year}\s*$'))
+                if prev_year_link:
+                    prev_url = prev_year_link.get('href')
+                    if prev_url:
+                        if not prev_url.startswith('http'):
+                            prev_url = f"https://www.gov.br{prev_url}"
+                        urls_to_check.append(prev_url)
+                else:
+                    urls_to_check.append(f"{ctir_main_url}/{prev_year}")
+
+            # Agora percorre as URLs (Principal, Ano Atual, Ano Anterior) para coletar alertas
+            for target_url in list(dict.fromkeys(urls_to_check)):
+                try:
+                    logger.info(f"Scraping CTIR Gov: {target_url}")
+                    resp = requests.get(target_url, timeout=12, headers=headers)
+                    if resp.status_code != 200: continue
+                    
+                    soup = BeautifulSoup(resp.content, 'html.parser')
+                    # Busca mais ampla por conteúdo
+                    content_area = soup.find('div', id='content-core') or \
+                                   soup.find('div', class_='documentContent') or \
+                                   soup.find('article') or \
+                                   soup.find('main') or \
+                                   soup.body
+                    
+                    if content_area:
+                        potential_links = content_area.find_all('a')
                         
-                        feed_items = []
-                        for item in items_found:
-                            title = item.find('title').text if item.find('title') is not None else ""
-                            link = item.find('link').text if item.find('link') is not None else feed["url"]
-                            pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
-                            description = item.find('description').text if item.find('description') is not None else ""
+                        for link in potential_links:
+                            url = link.get('href', '')
+                            title = link.get_text().strip()
                             
-                            # Limpa HTML da descrição
-                            description = re.sub(r'<[^>]+>', '', description).strip()
+                            # Filtro mais flexível para alertas
+                            is_alert_url = '/alertas/' in url and any(char.isdigit() for char in url)
+                            # Ignora links que são apenas índices de anos ou a própria página de alertas
+                            is_index = url.endswith('/alertas') or \
+                                       re.search(r'/alertas/\d{4}(/view)?$', url) or \
+                                       'index_html' in url
                             
-                            # Formata data sutilmente
-                            date_str = pub_date
-                            if pub_date:
-                                try:
-                                    # Tenta parsear data RSS padrão: "Sun, 28 Dec 2025 15:00:00 +0000"
-                                    # Corta timezone (+0000) para simplificar parse
-                                    clean_date = pub_date[:25].strip()
-                                    dt = datetime.strptime(clean_date, "%a, %d %b %Y %H:%M:%S")
-                                    date_str = dt.strftime("%d/%m/%Y")
-                                except Exception as de:
-                                    logger.debug(f"Erro ao parsear data {pub_date}: {de}")
-                                    
-                            feed_items.append({
-                                "date": date_str or datetime.now().strftime("%d/%m/%Y"),
-                                "title": f"[{feed['source']}] {title}",
-                                "summary": (description[:150] + "...") if len(description) > 150 else description,
-                                "url": link
-                            })
-                            if len(feed_items) >= limit: # Limite por fonte
-                                break
-                        items.extend(feed_items)
-                    except ET.ParseError as pe:
-                        logger.warning(f"Erro de XML no feed {feed['source']}: {pe}")
-            except Exception as e:
-                logger.warning(f"Erro ao consultar feed {feed['source']}: {e}")
-                continue
+                            if is_alert_url and not is_index and len(title) > 8:
+                                item_url = url if url.startswith('http') else f"https://www.gov.br{url}"
+                                if any(it['url'] == item_url for it in items): continue
+
+                                # Tenta extrair a data do texto do link ou do elemento pai
+                                date_str = None
+                                # 1. Tenta encontrar no texto do link (ex: "Alerta 01/2025 - 10/01/2025")
+                                m_date = re.search(r'(\d{2}/\d{2}/\d{4})', title)
+                                if m_date:
+                                    date_str = m_date.group(1)
+                                
+                                # 2. Tenta encontrar no elemento pai
+                                if not date_str:
+                                    parent = link.find_parent(['article', 'div', 'li', 'tr', 'p'])
+                                    if parent:
+                                        date_elem = parent.find(class_=re.compile(r'date|documentByLine|timestamp|summary-view-icon'))
+                                        if date_elem:
+                                            m_date = re.search(r'(\d{2}/\d{2}/\d{4})', date_elem.get_text())
+                                            if m_date: date_str = m_date.group(1)
+                                        else:
+                                            m_date = re.search(r'(\d{2}/\d{2}/\d{4})', parent.get_text())
+                                            if m_date: date_str = m_date.group(1)
+                                
+                                # 3. Se ainda não tem, usa a data atual como fallback (será ordenado por título se necessário)
+                                if not date_str:
+                                    date_str = now.strftime("%d/%m/%Y")
+
+                                items.append({
+                                    "date": date_str,
+                                    "title": f"[CTIR Gov] {title}",
+                                    "summary": f"Informativo oficial do CTIR Gov. Consulte para detalhes técnicos e recomendações.",
+                                    "url": item_url
+                                })
+                                
+                                if len(items) >= 40: break # Coleta bastante para garantir o Top 5
+                except Exception as e:
+                    logger.warning(f"Erro ao processar URL do CTIR {target_url}: {e}")
+                
+                if len(items) >= 40: break
+        except Exception as e:
+            logger.warning(f"Erro crítico no scraping do CTIR Gov: {e}")
 
         if not items:
-            # Fallback se os feeds falharem
+            logger.info("Nenhum alerta encontrado via scraping, usando fallbacks.")
             items = [
-                {"date": datetime.now().strftime("%d/%m/%Y"), "title": "[CERT.br] Phishing bancário em alta no Brasil", "summary": "Campanhas de e-mail e WhatsApp visando bancos populares e Pix.", "url": "https://www.cert.br/"},
-                {"date": datetime.now().strftime("%d/%m/%Y"), "title": "[CERT.br] Ransomware mirando pequenas empresas", "summary": "Famílias reempacotadas explorando RDP/445 expostos e credenciais fracas.", "url": "https://www.cert.br/"}
+                {"date": now.strftime("%d/%m/%Y"), "title": "[CTIR Gov] Alertas e Recomendações de Segurança", "summary": "Acesse o portal oficial para as últimas recomendações de segurança cibernética do governo federal.", "url": "https://www.gov.br/ctir/pt-br/assuntos/alertas-e-recomendacoes/alertas"},
+                {"date": now.strftime("%d/%m/%Y"), "title": "[CTIR Gov] Orientações para Prevenção de Incidentes", "summary": "Diretrizes oficiais para o tratamento de incidentes em redes governamentais.", "url": "https://www.gov.br/ctir/"}
             ]
         else:
-            # Ordena por data (heurística simples já que as datas são strings variadas, mas os feeds costumam vir ordenados)
-            pass
+            # Ordenação rigorosa por data (mais recentes primeiro)
+            try:
+                # Função auxiliar para converter string de data para objeto datetime
+                def parse_dt(d_str):
+                    try: return datetime.strptime(d_str, "%d/%m/%Y")
+                    except: return datetime.min
+                
+                items.sort(key=lambda x: parse_dt(x['date']), reverse=True)
+            except Exception as e:
+                logger.error(f"Erro ao ordenar alertas por data: {e}")
             
-        news_cache.set("br_alerts_v2", items, expire=1800) # Cache de 30 min
-        return items[:limit]
+        final_items = items[:limit]
+        
+        # Apenas faz cache se tivermos resultados reais (mais de 2 itens ou não são os fallbacks)
+        is_fallback = len(final_items) <= 2 and "Alertas e Recomendações" in final_items[0]['title']
+        if not is_fallback:
+            news_cache.set("br_alerts_v4", final_items, expire=3600) # Cache de 1 hora
+        
+        return final_items
     except Exception as e:
+
         logger.error(f"Erro crítico em get_br_threat_trends: {e}", exc_info=True)
         return [
-            {"date": datetime.now().strftime("%d/%m/%Y"), "title": "Tendências indisponíveis", "summary": "Falha ao consultar fontes nacionais.", "url": "https://www.cert.br/"}
+            {"date": datetime.now().strftime("%d/%m/%Y"), "title": "Tendências indisponíveis", "summary": "Falha ao consultar fontes do CTIR Gov.", "url": "https://www.gov.br/ctir/"}
         ]

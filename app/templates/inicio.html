@@ -138,38 +138,113 @@
         </div>
     </div>
 
-    <!-- Coluna da Direita: Alertas Recentes -->
+    <!-- Coluna da Direita: Alertas Recentes & CVEs -->
     <div class="glass-card" style="padding: 20px;">
-        <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 600;">Alertas Recentes</h3>
+        <div style="display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px;">
+            <button onclick="switchTab('recent')" id="tab-recent" class="tab-btn active" style="background: none; border: none; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; padding: 5px 10px; position: relative;">
+                Alertas Recentes
+            </button>
+            <button onclick="switchTab('cve')" id="tab-cve" class="tab-btn" style="background: none; border: none; color: var(--text-secondary); font-size: 14px; font-weight: 600; cursor: pointer; padding: 5px 10px; position: relative;">
+                CVEs em Destaque
+            </button>
+        </div>
         
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-            {% if stats and stats.recentes %}
-                {% for alerta in stats.recentes %}
-                <!-- Alerta Real -->
-                <a href="{{ url_for('main.results', report_id=alerta.id) }}" style="text-decoration: none; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 12px; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent-color)'" onmouseout="this.style.borderColor='var(--glass-border)'">
-                    <div style="width: 8px; height: 8px; border-radius: 50%; 
-                        {% if alerta.final_verdict == 'malicious' %}background: #ff4d4d; box-shadow: 0 0 8px #ff4d4d;
-                        {% elif alerta.final_verdict == 'suspicious' %}background: #ffc107; box-shadow: 0 0 8px #ffc107;
-                        {% else %}background: #198754; box-shadow: 0 0 8px #198754;{% endif %}">
-                    </div>
-                    <div style="flex: 1;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="font-size: 13px; font-weight: 600; color: #fff; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                {{ alerta.item_identifier }}
-                            </span>
-                            <span style="font-size: 10px; color: var(--text-secondary);">{{ alerta.created_at | strftime('%H:%M') }}</span>
+        <!-- Tab: Alertas Recentes -->
+        <div id="content-recent" class="tab-content">
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                {% if stats and stats.recentes %}
+                    {% for alerta in stats.recentes %}
+                    <a href="{{ url_for('main.results', report_id=alerta.id) }}" style="text-decoration: none; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 12px; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent-color)'" onmouseout="this.style.borderColor='var(--glass-border)'">
+                        <div style="width: 8px; height: 8px; border-radius: 50%; 
+                            {% if alerta.final_verdict == 'malicious' %}background: #ff4d4d; box-shadow: 0 0 8px #ff4d4d;
+                            {% elif alerta.final_verdict == 'suspicious' %}background: #ffc107; box-shadow: 0 0 8px #ffc107;
+                            {% else %}background: #198754; box-shadow: 0 0 8px #198754;{% endif %}">
                         </div>
-                        <div style="font-size: 11px; color: var(--text-secondary);">{{ alerta.item_type | capitalize }}</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="font-size: 13px; font-weight: 600; color: #fff; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    {{ alerta.item_identifier }}
+                                </span>
+                                <span style="font-size: 10px; color: var(--text-secondary);">{{ alerta.created_at | strftime('%H:%M') }}</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-secondary);">{{ alerta.item_type | capitalize }}</div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                        <i class="bi bi-shield-slash" style="font-size: 32px; display: block; margin-bottom: 10px; opacity: 0.3;"></i>
+                        <p style="font-size: 13px;">Nenhuma análise recente encontrada.</p>
                     </div>
-                </a>
-                {% endfor %}
-            {% else %}
-                <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
-                    <i class="bi bi-shield-slash" style="font-size: 32px; display: block; margin-bottom: 10px; opacity: 0.3;"></i>
-                    <p style="font-size: 13px;">Nenhuma análise recente encontrada.</p>
-                </div>
-            {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Tab: CVEs -->
+        <div id="content-cve" class="tab-content" style="display: none;">
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                {% if featured_cves %}
+                    {% for cve in featured_cves %}
+                    <div style="padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--glass-border);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px;">
+                            <a href="{{ cve.url }}" target="_blank" style="text-decoration: none; color: var(--accent-color); font-size: 13px; font-weight: 700;">
+                                {{ cve.id }}
+                            </a>
+                            <span style="font-size: 10px; color: var(--text-secondary);">{{ cve.date }}</span>
+                        </div>
+                        <div style="font-size: 12px; color: #fff; font-weight: 600; margin-bottom: 5px;">{{ cve.product }} ({{ cve.vendor }})</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                            {{ cve.summary }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <div style="text-align: center; margin-top: 10px;">
+                        <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" style="font-size: 11px; color: var(--text-secondary); text-decoration: none;">
+                            Ver catálogo completo <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                    </div>
+                {% else %}
+                    <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                        <i class="bi bi-bug" style="font-size: 32px; display: block; margin-bottom: 10px; opacity: 0.3;"></i>
+                        <p style="font-size: 13px;">Buscando CVEs...</p>
+                    </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
+
+<style>
+    .tab-btn.active::after {
+        content: '';
+        position: absolute;
+        bottom: -11px;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: var(--accent-color);
+        box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .tab-btn.active {
+        color: #fff !important;
+    }
+</style>
+
+<script>
+function switchTab(tab) {
+    // Buttons
+    document.getElementById('tab-recent').classList.remove('active');
+    document.getElementById('tab-cve').classList.remove('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    
+    // Content
+    document.getElementById('content-recent').style.display = 'none';
+    document.getElementById('content-cve').style.display = 'none';
+    document.getElementById('content-' + tab).style.display = 'block';
+    
+    // Colors
+    document.getElementById('tab-recent').style.color = (tab === 'recent') ? '#fff' : 'var(--text-secondary)';
+    document.getElementById('tab-cve').style.color = (tab === 'cve') ? '#fff' : 'var(--text-secondary)';
+}
+</script>
 {% endblock %}

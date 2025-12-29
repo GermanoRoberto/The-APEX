@@ -65,6 +65,15 @@ def create_app():
         """Retorna o nome base de um caminho de arquivo."""
         import os
         return os.path.basename(path)
+
+    @app.template_filter('markdown')
+    def markdown_filter(text):
+        """Converte Markdown para HTML."""
+        import markdown
+        from markupsafe import Markup
+        if not text:
+            return ""
+        return Markup(markdown.markdown(text, extensions=['extra', 'codehilite']))
     
     # Inicializa tabelas (pode ser movido para um comando CLI em produção para evitar overhead)
     # Mas como é SQLite local e leve, fazemos aqui para garantir funcionamento imediato.

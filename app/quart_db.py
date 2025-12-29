@@ -111,14 +111,19 @@ def save_analysis(result: dict) -> int:
         with DatabaseConnection() as db:
             cursor = db.cursor()
             item_type = result.get('item_type') or ('file' if 'sha256' in result else ('url' if result.get('url') else ('network' if result.get('network_cidr') else 'unknown')))
+            
+            # Prepara dados extras (tudo que não é coluna principal) para salvar no JSON external_results
+            main_cols = ['item_identifier', 'item_type', 'final_verdict', 'created_at', 'ai_analysis', 'mitre_attack']
+            extra_data = {k: v for k, v in result.items() if k not in main_cols}
+
             cursor.execute(
                 'INSERT INTO analyses (item_identifier, item_type, final_verdict, created_at, external_results, ai_analysis, mitre_attack) VALUES (?, ?, ?, ?, ?, ?, ?)',
                 (
                     item_identifier,
                     item_type,
                     result.get('final_verdict', 'unknown'),
-                    float(result.get('scanned_at', time.time())),
-                    json.dumps(result.get('external', {})),
+                    float(result.get('scanned_at', result.get('created_at', time.time()))),
+                    json.dumps(extra_data),
                     json.dumps(result.get('ai_analysis', {})),
                     json.dumps(result.get('mitre_attack', {}))
                 )
@@ -132,14 +137,12 @@ def save_analysis(result: dict) -> int:
 
 def get_all_analyses():
     """Retorna todas as análises ordenadas por data (recente primeiro)."""
-    # Leituras rápidas podem usar nova conexão ou g.db dependendo do contexto.
-    # Para simplicidade e segurança, usamos nova conexão aqui também.
     with DatabaseConnection() as db:
         analyses = db.execute('SELECT * FROM analyses ORDER BY created_at DESC').fetchall()
         return [dict(row) for row in analyses]
 
 def get_analysis(analysis_id):
-    """Retorna uma análise específica pelo ID, com campos JSON decodificados."""
+    """Retorna uma análise específica pelo ID, com campos JSON decodificados e mesclados."""
     with DatabaseConnection() as db:
         row = db.execute('SELECT * FROM analyses WHERE id = ?', (analysis_id,)).fetchone()
         if row is None:
@@ -149,13 +152,22 @@ def get_analysis(analysis_id):
         # Decodifica JSONs com tratamento de erro básico
         for field in ['external_results', 'ai_analysis', 'mitre_attack']:
             try:
-                # Mapeia nome do campo no DB para nome no objeto (remove '_results' se necessário)
-                key = 'external' if field == 'external_results' else field
                 content = data.pop(field) # Remove o campo original de texto
-                data[key] = json.loads(content) if content else {}
+                decoded = json.loads(content) if content else {}
+                
+                if field == 'external_results':
+                    # Mescla dados extras de volta no dicionário principal
+                    data.update(decoded)
+                else:
+                    data[field] = decoded
             except json.JSONDecodeError:
-                data[key] = {}
+                if field != 'external_results':
+                    data[field] = {}
                 logger.warning(f"Falha ao decodificar JSON do campo {field} para análise {analysis_id}")
+        
+        # Garante que 'external' exista se foi mesclado de external_results
+        if 'external' not in data:
+            data['external'] = {}
 
         return data
 

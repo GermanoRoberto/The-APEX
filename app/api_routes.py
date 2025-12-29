@@ -96,7 +96,7 @@ async def analyze_file():
 
         # Chama o serviço de análise
         result_id = await services.run_file_analysis(content, filename, ai_provider)
-    return jsonify({'result_id': result_id})
+        return jsonify({'result_id': result_id})
 
     except ValidationError as e:
         return jsonify({'error': e.errors()}), 400

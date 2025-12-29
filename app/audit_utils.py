@@ -139,3 +139,42 @@ def validate_audit_data(data: Dict[str, Any]) -> bool:
     except Exception as e:
         logger.error(f"Erro crítico durante validação de dados: {e}")
         return False
+
+def get_vault_credentials() -> list:
+    """
+    Coleta credenciais do Windows Vault usando o comando cmdkey.
+    Retorna uma lista de dicionários com target, type e user.
+    """
+    try:
+        # Executa cmdkey /list
+        output = subprocess.check_output("cmdkey /list", shell=True).decode(errors="ignore")
+        
+        entries = []
+        current = {}
+        for line in output.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Suporta inglês (Target, Type, User) e português (Destino, Tipo, Usuário)
+            if ":" in line:
+                key, val = line.split(":", 1)
+                key = key.strip().lower()
+                val = val.strip()
+                
+                if key in ["target", "destino"]:
+                    if current:
+                        entries.append(current)
+                    current = {"target": val}
+                elif key in ["type", "tipo"]:
+                    current["type"] = val
+                elif key in ["user", "usuário", "usuario"]:
+                    current["user"] = val
+                
+        if current:
+            entries.append(current)
+            
+        return entries
+    except Exception as e:
+        logger.error(f"Erro ao coletar credenciais do Vault: {e}")
+        return []
